@@ -1,0 +1,85 @@
+import { useEffect, useState } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { authApi } from '../api';
+import { puedeCargarMarcasManuales, useAuthStore } from '../store/authStore';
+import Layout from '../components/Layout';
+import LoginPage from '../pages/LoginPage';
+import AuthCallbackPage from '../pages/AuthCallbackPage';
+import DashboardPage from '../pages/DashboardPage';
+import RecibosPage from '../pages/RecibosPage';
+import LicenciasPage from '../pages/LicenciasPage';
+import PendientesPage from '../pages/PendientesPage';
+import FichadasPage from '../pages/FichadasPage';
+import MarcasManualesPage from '../pages/MarcasManualesPage';
+import AnunciosPage from '../pages/AnunciosPage';
+import CertificadosPage from '../pages/CertificadosPage';
+import NotificacionesPage from '../pages/NotificacionesPage';
+import AdminEmpleadosPage from '../pages/admin/AdminEmpleadosPage';
+import AdminTiposLicenciaPage from '../pages/admin/AdminTiposLicenciaPage';
+import AdminPeriodosPage from '../pages/admin/AdminPeriodosPage';
+import AdminAreasPage from '../pages/admin/AdminAreasPage';
+import AdminEstadisticasPage from '../pages/admin/AdminEstadisticasPage';
+import AdminReportesFichadasPage from '../pages/admin/AdminReportesFichadasPage';
+
+function MarcasManualesProtegida() {
+  const roles = useAuthStore((s) => s.usuario?.roles);
+  return puedeCargarMarcasManuales(roles) ? <MarcasManualesPage /> : <Navigate to="/" replace />;
+}
+
+export function RouterProvider() {
+  const token = useAuthStore((s) => s.token);
+  const usuario = useAuthStore((s) => s.usuario);
+  const setUsuario = useAuthStore((s) => s.setUsuario);
+  const [hidratando, setHidratando] = useState(false);
+
+  useEffect(() => {
+    if (!token || usuario) return;
+    setHidratando(true);
+    authApi
+      .me()
+      .then(setUsuario)
+      .catch(() => {})
+      .finally(() => setHidratando(false));
+  }, [token, usuario, setUsuario]);
+
+  if (!token) {
+    return (
+      <Routes>
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="*" element={<LoginPage />} />
+      </Routes>
+    );
+  }
+
+  if (!usuario && hidratando) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-base">
+        <p className="animate-pulse text-ink-primary">Cargando...</p>
+      </div>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/recibos" element={<RecibosPage />} />
+        <Route path="/licencias" element={<LicenciasPage />} />
+        <Route path="/pendientes" element={<PendientesPage />} />
+        <Route path="/fichadas" element={<FichadasPage />} />
+        <Route path="/marcas-manuales" element={<MarcasManualesProtegida />} />
+        <Route path="/anuncios" element={<AnunciosPage />} />
+        <Route path="/certificados" element={<CertificadosPage />} />
+        <Route path="/notificaciones" element={<NotificacionesPage />} />
+        <Route path="/admin/empleados" element={<AdminEmpleadosPage />} />
+        <Route path="/admin/tipos-licencia" element={<AdminTiposLicenciaPage />} />
+        <Route path="/admin/periodos" element={<AdminPeriodosPage />} />
+        <Route path="/admin/areas" element={<AdminAreasPage />} />
+        <Route path="/admin/estadisticas" element={<AdminEstadisticasPage />} />
+        <Route path="/admin/reportes-fichadas" element={<AdminReportesFichadasPage />} />
+      </Route>
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}

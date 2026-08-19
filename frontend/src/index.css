@@ -1,0 +1,146 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+
+  /* Tema oscuro (default) — Mindful Dark UI */
+  --bg-base: 15 10 11;
+  --surface: 28 24 23;
+  --surface-alt: 33 29 28;
+  --surface-soft: 38 33 32;
+  --accent: 232 217 197;
+  --accent-ink: 36 29 22;
+  --accent-text: 232 217 197;
+  --text-primary: 245 240 234;
+  --text-secondary: 156 148 144;
+  --text-muted: 139 131 125;
+  --border-soft: rgba(255, 255, 255, 0.06);
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --tint-success-bg: rgba(110, 190, 140, 0.15);
+  --tint-success-text: #b8e0c4;
+  --tint-danger-bg: rgba(220, 120, 120, 0.15);
+  --tint-danger-text: #e8b4b4;
+  --tint-warning-bg: rgba(230, 190, 110, 0.15);
+  --tint-warning-text: #ecd3a0;
+  --btn-danger-bg: #5a2626;
+  --btn-danger-hover: #6b3030;
+  --btn-danger-text: #f5e0e0;
+  --text-danger: #e8b4b4;
+  --text-success: #b8e0c4;
+  --chart-grid: rgba(255, 255, 255, 0.06);
+  --chart-tick: #8b837d;
+  --chart-tooltip-bg: #211d1c;
+  --chart-tooltip-border: rgba(255, 255, 255, 0.05);
+  --chart-fill: #e8d9c5;
+  --chart-cursor: rgba(255, 255, 255, 0.04);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  /* Tema claro — la misma identidad cálida invertida */
+  --bg-base: 247 243 238;
+  --surface: 255 253 250;
+  --surface-alt: 250 246 241;
+  --surface-soft: 238 232 226;
+  --accent: 232 217 197;
+  --accent-ink: 36 29 22;
+  --accent-text: 122 91 53;
+  --text-primary: 41 36 32;
+  --text-secondary: 105 97 90;
+  --text-muted: 134 125 117;
+  --border-soft: rgba(41, 36, 32, 0.1);
+  --shadow-card: 0 8px 24px rgba(70, 60, 50, 0.12);
+  --tint-success-bg: rgba(46, 130, 84, 0.12);
+  --tint-success-text: #1f6b41;
+  --tint-danger-bg: rgba(190, 60, 60, 0.12);
+  --tint-danger-text: #a13030;
+  --tint-warning-bg: rgba(180, 130, 40, 0.14);
+  --tint-warning-text: #8a6412;
+  --btn-danger-bg: #b3261e;
+  --btn-danger-hover: #9c2019;
+  --btn-danger-text: #fffaf5;
+  --text-danger: #a13030;
+  --text-success: #1f6b41;
+  --chart-grid: rgba(41, 36, 32, 0.08);
+  --chart-tick: #867d75;
+  --chart-tooltip-bg: #fffdfa;
+  --chart-tooltip-border: rgba(41, 36, 32, 0.1);
+  --chart-fill: #c2a376;
+  --chart-cursor: rgba(41, 36, 32, 0.05);
+}
+
+@layer base {
+  body {
+    @apply bg-base font-sans text-ink-primary antialiased;
+  }
+  h1,
+  h2 {
+    @apply font-serif;
+  }
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-card bg-surface p-5 shadow-card;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-pill px-5 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-accent-ink hover:bg-accent/90;
+  }
+  .btn-secondary {
+    @apply btn bg-surface-soft text-ink-primary hover:bg-surface-alt;
+  }
+  .btn-danger {
+    @apply btn;
+    background: var(--btn-danger-bg);
+    color: var(--btn-danger-text);
+  }
+  .btn-danger:hover {
+    background: var(--btn-danger-hover);
+  }
+  .input {
+    @apply w-full rounded-[14px] border border-soft bg-surface-soft px-3.5 py-2 text-sm text-ink-primary outline-none placeholder:text-ink-muted focus:border-accent/60 focus:ring-1 focus:ring-accent/60;
+  }
+  .label {
+    @apply mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-ink-secondary;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-pill px-2.5 py-0.5 text-xs font-medium;
+  }
+}
+
+@layer utilities {
+  .border-soft {
+    border-color: var(--border-soft);
+  }
+  .divide-soft > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--border-soft);
+  }
+  .tint-success {
+    background: var(--tint-success-bg);
+    color: var(--tint-success-text);
+  }
+  .tint-danger {
+    background: var(--tint-danger-bg);
+    color: var(--tint-danger-text);
+  }
+  .tint-warning {
+    background: var(--tint-warning-bg);
+    color: var(--tint-warning-text);
+  }
+  .text-danger {
+    color: var(--text-danger);
+  }
+  .text-success {
+    color: var(--text-success);
+  }
+}

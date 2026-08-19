@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: portal-iupa-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: portal_iupa
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - portal-iupa-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d portal_iupa"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: src/PortalIUPA.Api/Dockerfile
+    container_name: portal-iupa-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__PortalIUPA: "Host=db;Port=5432;Database=portal_iupa;Username=postgres;Password=postgres"
+      Frontend__BaseUrl: "http://localhost:5173"
+      Auth__DevLoginEnabled: "false"
+      Google__ClientId: "${GOOGLE_CLIENT_ID}"
+      Google__ClientSecret: "${GOOGLE_CLIENT_SECRET}"
+      Jwt__Secret: "${JWT_SECRET}"
+    ports:
+      - "5001:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: portal-iupa-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+
+volumes:
+  portal-iupa-data:

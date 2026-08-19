@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PortalIUPA.Api/PortalIUPA.Api.csproj" />
+    <Project Path="src/PortalIUPA.Application/PortalIUPA.Application.csproj" />
+    <Project Path="src/PortalIUPA.Domain/PortalIUPA.Domain.csproj" />
+    <Project Path="src/PortalIUPA.Infrastructure/PortalIUPA.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PortalIUPA.Application.Tests/PortalIUPA.Application.Tests.csproj" />
+    <Project Path="tests/PortalIUPA.Domain.Tests/PortalIUPA.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

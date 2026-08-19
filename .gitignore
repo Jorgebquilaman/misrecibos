@@ -1,0 +1,41 @@
+# .NET
+bin/
+obj/
+*.user
+
+# Base de datos local
+*.db
+*.db-journal
+
+# Logs
+logs/
+*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Archivos subidos en desarrollo
+storage/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Entorno
+.env
+.env.*
+!.env.example
+
+# Secretos de configuración (no se suben a git)
+**/appsettings.Development.json
+**/appsettings.Production.json
+
+# Sistema legacy (no forma parte del nuevo portal)
+MisRecibos2/
+MisRecibos2.zip
