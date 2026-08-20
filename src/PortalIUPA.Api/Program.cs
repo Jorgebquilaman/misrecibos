@@ -58,8 +58,13 @@ builder.Services.AddSwaggerGen(o =>
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+var frontendOrigins = builder.Configuration.GetSection("Frontend:Origins").Get<string[]>();
+var allowedOrigins = frontendOrigins is { Length: > 0 }
+    ? frontendOrigins
+    : new[] { frontendBaseUrl };
+
 builder.Services.AddCors(o => o.AddPolicy("Frontend", p =>
-    p.WithOrigins(frontendBaseUrl).AllowAnyHeader().AllowAnyMethod()));
+    p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()
     ?? throw new InvalidOperationException("Falta la sección de configuración 'Jwt'.");

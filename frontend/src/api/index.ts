@@ -1,4 +1,4 @@
-import api from './axios';
+import api, { apiBaseUrl } from './axios';
 import type { Usuario } from '../store/authStore';
 import type {
   AnuncioDto,
@@ -29,7 +29,7 @@ export const authApi = {
   me: () => api.get<Usuario>('/auth/me').then((r) => r.data),
   devLogin: (correo: string) => api.post('/auth/dev-login', { correo }).then((r) => r.data),
   googleDisponible: () => api.get('/auth/google-disponible').then((r) => r.data as { disponible: boolean }),
-  loginUrl: () => '/api/auth/login'
+  loginUrl: () => `${apiBaseUrl}/auth/login`
 };
 
 export const recibosApi = {
