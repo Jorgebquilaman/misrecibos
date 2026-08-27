@@ -23,4 +23,11 @@ public sealed class MarcaReloj
     }
 
     public DateOnly Fecha => DateOnly.FromDateTime(FechaHora);
+
+    /// <summary>Edición de una marca manual (fecha/hora y tipo). Solo aplica a marcas de origen "manual".</summary>
+    public void Editar(DateTime fechaHora, TipoMarca tipo)
+    {
+        FechaHora = fechaHora;
+        Tipo = tipo;
+    }
 }

@@ -13,13 +13,16 @@ import FichadasPage from '../pages/FichadasPage';
 import MarcasManualesPage from '../pages/MarcasManualesPage';
 import AnunciosPage from '../pages/AnunciosPage';
 import CertificadosPage from '../pages/CertificadosPage';
+import MiCvPage from '../pages/MiCvPage';
 import NotificacionesPage from '../pages/NotificacionesPage';
 import AdminEmpleadosPage from '../pages/admin/AdminEmpleadosPage';
+import AdminCertificadosCvPage from '../pages/admin/AdminCertificadosCvPage';
 import AdminTiposLicenciaPage from '../pages/admin/AdminTiposLicenciaPage';
 import AdminPeriodosPage from '../pages/admin/AdminPeriodosPage';
 import AdminAreasPage from '../pages/admin/AdminAreasPage';
 import AdminEstadisticasPage from '../pages/admin/AdminEstadisticasPage';
 import AdminReportesFichadasPage from '../pages/admin/AdminReportesFichadasPage';
+import AdminAnunciosPage from '../pages/admin/AdminAnunciosPage';
 
 function MarcasManualesProtegida() {
   const roles = useAuthStore((s) => s.usuario?.roles);
@@ -70,13 +73,16 @@ export function RouterProvider() {
         <Route path="/marcas-manuales" element={<MarcasManualesProtegida />} />
         <Route path="/anuncios" element={<AnunciosPage />} />
         <Route path="/certificados" element={<CertificadosPage />} />
+        <Route path="/cv" element={<MiCvPage />} />
         <Route path="/notificaciones" element={<NotificacionesPage />} />
         <Route path="/admin/empleados" element={<AdminEmpleadosPage />} />
+        <Route path="/admin/cv" element={<AdminCertificadosCvPage />} />
         <Route path="/admin/tipos-licencia" element={<AdminTiposLicenciaPage />} />
         <Route path="/admin/periodos" element={<AdminPeriodosPage />} />
         <Route path="/admin/areas" element={<AdminAreasPage />} />
         <Route path="/admin/estadisticas" element={<AdminEstadisticasPage />} />
         <Route path="/admin/reportes-fichadas" element={<AdminReportesFichadasPage />} />
+        <Route path="/admin/anuncios" element={<AdminAnunciosPage />} />
       </Route>
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />

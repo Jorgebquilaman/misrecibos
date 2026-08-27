@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PortalIUPA.Api.Auth;
+using PortalIUPA.Application.Common;
 using PortalIUPA.Application.UseCases.Fichadas;
 
 namespace PortalIUPA.Api.Controllers;
@@ -11,12 +12,27 @@ namespace PortalIUPA.Api.Controllers;
 public sealed class FichadasController : ApiControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly IExportadorTabular _exportador;
 
-    public FichadasController(IMediator mediator) => _mediator = mediator;
+    public FichadasController(IMediator mediator, IExportadorTabular exportador)
+    {
+        _mediator = mediator;
+        _exportador = exportador;
+    }
 
     [HttpGet("mias")]
     public async Task<IActionResult> Mias([FromQuery] int anio, [FromQuery] int mes) =>
         Ok(await _mediator.Send(new GetMisFichadasQuery(EmpleadoId, anio, mes)));
+
+    /// <summary>Exporta las fichadas propias del mes en PDF o Excel.</summary>
+    [HttpGet("mias/exportar")]
+    public async Task<IActionResult> ExportarMias([FromQuery] int anio, [FromQuery] int mes,
+        [FromQuery] string formato = "pdf")
+    {
+        var reporte = await _mediator.Send(new ExportarMisFichadasQuery(EmpleadoId, anio, mes));
+        var archivo = await _exportador.GenerarAsync(reporte, formato);
+        return File(archivo.Bytes, archivo.ContentType, archivo.NombreArchivo);
+    }
 
     [Authorize(Policy = "Responsable")]
     [HttpGet("asistencia")]
@@ -29,6 +45,20 @@ public sealed class FichadasController : ApiControllerBase
     public async Task<IActionResult> CrearMarcaManual([FromBody] CrearMarcaManualRequest request) =>
         Ok(await _mediator.Send(new CrearMarcaManualCommand(EmpleadoId, User.GetRoles(), request.EmpleadoId,
             request.FechaHora, request.Tipo)));
+
+    /// <summary>Edita una marca manual propia o de un empleado si es staff. Replica el cambio en el reloj (MSSQL).</summary>
+    [HttpPut("marcas-manuales/{id:guid}")]
+    public async Task<IActionResult> EditarMarcaManual(Guid id, [FromBody] EditarMarcaManualRequest request) =>
+        Ok(await _mediator.Send(new EditarMarcaManualCommand(EmpleadoId, User.GetRoles(), id,
+            request.FechaHora, request.Tipo)));
+
+    /// <summary>Elimina una marca manual propia o de un empleado si es staff. Replica la eliminación en el reloj (MSSQL).</summary>
+    [HttpDelete("marcas-manuales/{id:guid}")]
+    public async Task<IActionResult> EliminarMarcaManual(Guid id)
+    {
+        await _mediator.Send(new EliminarMarcaManualCommand(EmpleadoId, User.GetRoles(), id));
+        return NoContent();
+    }
 
     /// <summary>Lista marcas manuales (propias; staff puede filtrar por empleado).</summary>
     [HttpGet("marcas-manuales")]
@@ -48,3 +78,5 @@ public sealed class FichadasController : ApiControllerBase
 }
 
 public sealed record CrearMarcaManualRequest(Guid? EmpleadoId, DateTime FechaHora, string Tipo);
+
+public sealed record EditarMarcaManualRequest(DateTime FechaHora, string Tipo);

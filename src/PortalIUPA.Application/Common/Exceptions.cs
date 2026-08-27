@@ -17,3 +17,10 @@ public sealed class AccesoDenegadoException : Exception
 {
     public AccesoDenegadoException(string mensaje = "No tiene permisos para realizar esta operación.") : base(mensaje) { }
 }
+
+/// <summary>El reloj biométrico (MSSQL) no está disponible (503).</summary>
+public sealed class RelojNoDisponibleException : Exception
+{
+    public TimeSpan? ReintentoEn { get; }
+    public RelojNoDisponibleException(string mensaje, TimeSpan? reintentoEn = null) : base(mensaje) => ReintentoEn = reintentoEn;
+}

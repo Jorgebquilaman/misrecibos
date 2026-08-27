@@ -1,6 +1,12 @@
 export function formatFecha(fecha: string | Date | null | undefined): string {
   if (!fecha) return '';
-  const d = typeof fecha === 'string' ? new Date(fecha) : fecha;
+  let d: Date;
+  if (typeof fecha === 'string') {
+    // DateOnly "YYYY-MM-DD" de la API: parsear como fecha local, no UTC (sino en UTC-3 se ve un día atrás)
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha);
+    if (m) d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    else d = new Date(fecha);
+  } else d = fecha;
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 

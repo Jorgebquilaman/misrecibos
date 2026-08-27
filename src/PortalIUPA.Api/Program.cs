@@ -166,8 +166,11 @@ builder.Services.AddAuthorization(o =>
     o.AddPolicy("Administrador", p => p.RequireRole(Rol.Administrador.ToString()));
 });
 
-builder.Services.Configure<ForwardedHeadersOptions>(o => o.ForwardedHeaders =
-    ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto);
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.KnownProxies.Add(System.Net.IPAddress.Parse("172.16.0.10"));
+});
 
 var app = builder.Build();
 
@@ -197,6 +200,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.Use(async (context, next) =>
+{
+    if (context.Request.Headers.ContainsKey("Access-Control-Request-Private-Network"))
+        context.Response.Headers.Append("Access-Control-Allow-Private-Network", "true");
+    await next();
+});
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();

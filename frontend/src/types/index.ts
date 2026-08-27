@@ -170,6 +170,50 @@ export interface CertificadoDto {
   fechaSolicitud: string;
 }
 
+export interface CertificadoCvDto {
+  id: string;
+  nombre: string;
+  institucion: string;
+  tipo: string;
+  fechaObtencion: string;
+  estado: string;
+  comentarioRevision: string | null;
+  adjuntoId: string;
+  nombreArchivo: string;
+  tamanoBytes: number;
+  fechaCarga: string;
+}
+
+export interface CertificadoCvAdminDto extends CertificadoCvDto {
+  empleadoId: string;
+  legajo: number;
+  empleadoNombre: string;
+  area: string | null;
+}
+
+export interface ExperienciaCvDto {
+  id?: string;
+  puesto: string;
+  institucion: string;
+  descripcion: string | null;
+  fechaDesde: string;
+  fechaHasta: string | null;
+}
+
+export interface AntecedenteAcademicoDto {
+  id: string;
+  titulo: string;
+  institucion: string;
+  nivel: string;
+  descripcion: string | null;
+  fechaDesde: string;
+  fechaHasta: string | null;
+  adjuntoId: string;
+  nombreArchivo: string;
+  tamanoBytes: number;
+  fechaCarga: string;
+}
+
 export interface AreaDto {
   id: string;
   nombre: string;
@@ -224,6 +268,11 @@ export interface DashboardEmpleadoDto {
   fichadasDelMes: { diasTrabajados: number; diasConAnomalia: number; totalHoras: string; promedioHoras: string | null } | null;
   anuncios: AnuncioDto[];
   notificacionesNoLeidas: number;
+  recibos?: { totalActivos: number; descargados: number; pendientes: number; disponibles: { periodoId: string; periodoCodigo: string; periodoDescripcion: string | null; yaDescargado: boolean; fechaUltimaDescarga: string | null }[] } | null;
+  licenciasDetallado?: { enEspera: number; aprobadas: number; desaprobadas: number; canceladas: number; consumo: { tipoLicenciaId: string; tipoLicenciaNombre: string; consumidosMes: number; consumidosAnio: number; limiteMensual: number | null; limiteAnual: number | null }[] } | null;
+  fichadasDetallado?: { diasTrabajados: number; diasConAnomalia: number; faltas: number; tardanzas: number; totalHoras: string; promedioHoras: string | null; jornadas: { fecha: string; entrada: string | null; salida: string | null; horas: string | null; esAnomalia: boolean }[] } | null;
+  cv?: { experiencias: number; antecedentes: number; certificados: number; certificadosVerificados: number; completitudPct: number; certificadosPorTipo: { tipo: string; cantidad: number }[] } | null;
+  certificadosResumen?: { total: number; generados: number } | null;
 }
 
 export interface DashboardEmpleadorDto {

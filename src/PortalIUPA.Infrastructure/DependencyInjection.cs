@@ -38,6 +38,9 @@ public static class DependencyInjection
         services.AddScoped<IAnuncioLeidoRepository, AnuncioLeidoRepository>();
         services.AddScoped<INotificacionRepository, NotificacionRepository>();
         services.AddScoped<ICertificadoLaboralRepository, CertificadoLaboralRepository>();
+        services.AddScoped<ICertificadoCvRepository, CertificadoCvRepository>();
+        services.AddScoped<ICvExperienciaRepository, CvExperienciaRepository>();
+        services.AddScoped<ICvAntecedenteAcademicoRepository, CvAntecedenteAcademicoRepository>();
         services.AddScoped<IAccesoLogRepository, AccesoLogRepository>();
 
         // Adaptadores externos
@@ -70,6 +73,7 @@ public static class DependencyInjection
         services.AddScoped<ITokenService, JwtTokenService>();
 
         services.AddScoped<IGeneradorPdfCertificado, CertificadoPdfGenerator>();
+        services.AddScoped<IGeneradorPdfCv, CvPdfGenerator>();
 
         return services;
     }

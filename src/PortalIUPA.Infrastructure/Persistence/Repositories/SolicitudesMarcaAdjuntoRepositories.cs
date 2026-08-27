@@ -151,4 +151,19 @@ public sealed class MarcaRelojRepository : IMarcaRelojRepository
 
     public Task<bool> ExisteAsync(Guid empleadoId, DateTime fechaHora, CancellationToken ct = default) =>
         _db.MarcasReloj.AnyAsync(m => m.EmpleadoId == empleadoId && m.FechaHora == fechaHora, ct);
+
+    public Task<MarcaReloj?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+        _db.MarcasReloj.FirstOrDefaultAsync(m => m.Id == id, ct);
+
+    public async Task UpdateAsync(MarcaReloj marca, CancellationToken ct = default)
+    {
+        _db.MarcasReloj.Update(marca);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteAsync(MarcaReloj marca, CancellationToken ct = default)
+    {
+        _db.MarcasReloj.Remove(marca);
+        await _db.SaveChangesAsync(ct);
+    }
 }

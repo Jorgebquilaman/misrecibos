@@ -2,45 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: dark;
-
-  /* Tema oscuro (default) — Mindful Dark UI */
-  --bg-base: 15 10 11;
-  --surface: 28 24 23;
-  --surface-alt: 33 29 28;
-  --surface-soft: 38 33 32;
-  --accent: 232 217 197;
-  --accent-ink: 36 29 22;
-  --accent-text: 232 217 197;
-  --text-primary: 245 240 234;
-  --text-secondary: 156 148 144;
-  --text-muted: 139 131 125;
-  --border-soft: rgba(255, 255, 255, 0.06);
-  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
-  --tint-success-bg: rgba(110, 190, 140, 0.15);
-  --tint-success-text: #b8e0c4;
-  --tint-danger-bg: rgba(220, 120, 120, 0.15);
-  --tint-danger-text: #e8b4b4;
-  --tint-warning-bg: rgba(230, 190, 110, 0.15);
-  --tint-warning-text: #ecd3a0;
-  --btn-danger-bg: #5a2626;
-  --btn-danger-hover: #6b3030;
-  --btn-danger-text: #f5e0e0;
-  --text-danger: #e8b4b4;
-  --text-success: #b8e0c4;
-  --chart-grid: rgba(255, 255, 255, 0.06);
-  --chart-tick: #8b837d;
-  --chart-tooltip-bg: #211d1c;
-  --chart-tooltip-border: rgba(255, 255, 255, 0.05);
-  --chart-fill: #e8d9c5;
-  --chart-cursor: rgba(255, 255, 255, 0.04);
-}
-
+:root,
 :root[data-theme='light'] {
   color-scheme: light;
 
-  /* Tema claro — la misma identidad cálida invertida */
+  /* Tema claro (default) — la misma identidad cálida invertida */
   --bg-base: 247 243 238;
   --surface: 255 253 250;
   --surface-alt: 250 246 241;
@@ -70,6 +36,41 @@
   --chart-tooltip-border: rgba(41, 36, 32, 0.1);
   --chart-fill: #c2a376;
   --chart-cursor: rgba(41, 36, 32, 0.05);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Tema oscuro — Mindful Dark UI */
+  --bg-base: 15 10 11;
+  --surface: 28 24 23;
+  --surface-alt: 33 29 28;
+  --surface-soft: 38 33 32;
+  --accent: 232 217 197;
+  --accent-ink: 36 29 22;
+  --accent-text: 232 217 197;
+  --text-primary: 245 240 234;
+  --text-secondary: 156 148 144;
+  --text-muted: 139 131 125;
+  --border-soft: rgba(255, 255, 255, 0.06);
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --tint-success-bg: rgba(110, 190, 140, 0.15);
+  --tint-success-text: #b8e0c4;
+  --tint-danger-bg: rgba(220, 120, 120, 0.15);
+  --tint-danger-text: #e8b4b4;
+  --tint-warning-bg: rgba(230, 190, 110, 0.15);
+  --tint-warning-text: #ecd3a0;
+  --btn-danger-bg: #5a2626;
+  --btn-danger-hover: #6b3030;
+  --btn-danger-text: #f5e0e0;
+  --text-danger: #e8b4b4;
+  --text-success: #b8e0c4;
+  --chart-grid: rgba(255, 255, 255, 0.06);
+  --chart-tick: #8b837d;
+  --chart-tooltip-bg: #211d1c;
+  --chart-tooltip-border: rgba(255, 255, 255, 0.05);
+  --chart-fill: #e8d9c5;
+  --chart-cursor: rgba(255, 255, 255, 0.04);
 }
 
 @layer base {

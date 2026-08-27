@@ -7,6 +7,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        navigateFallback: null,
+        globPatterns: ['assets/**/*.{js,css,woff2}']
+      },
       manifest: {
         name: 'Portal del Empleado IUPA',
         short_name: 'Portal IUPA',

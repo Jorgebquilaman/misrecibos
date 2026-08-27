@@ -29,7 +29,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const [abierto, setAbierto] = useState(false);
   const [noLeidas, setNoLeidas] = useState(0);
-  const [tema, setTema] = useState(() => document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+  const [tema, setTema] = useState(() => document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', tema);
@@ -101,6 +101,9 @@ export default function Layout() {
           <NavLink to="/certificados" className={linkClase}>
             <FileText size={18} /> Certificados
           </NavLink>
+          <NavLink to="/cv" className={linkClase}>
+            <GraduationCap size={18} /> Mi CV
+          </NavLink>
           <NavLink to="/notificaciones" className={linkClase}>
             <Bell size={18} />
             Notificaciones
@@ -124,6 +127,9 @@ export default function Layout() {
               <NavLink to="/admin/empleados" className={linkClase}>
                 <Users size={18} /> Empleados
               </NavLink>
+              <NavLink to="/admin/cv" className={linkClase}>
+                <GraduationCap size={18} /> Certificados CV
+              </NavLink>
               <NavLink to="/admin/tipos-licencia" className={linkClase}>
                 <CalendarClock size={18} /> Tipos de licencia
               </NavLink>
@@ -138,6 +144,9 @@ export default function Layout() {
               </NavLink>
               <NavLink to="/admin/reportes-fichadas" className={linkClase}>
                 <TableProperties size={18} /> Reportes de fichadas
+              </NavLink>
+              <NavLink to="/admin/anuncios" className={linkClase}>
+                <Newspaper size={18} /> Anuncios
               </NavLink>
             </>
           )}

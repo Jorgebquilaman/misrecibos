@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using PortalIUPA.Application.Common;
 using PortalIUPA.Application.DTOs;
 using PortalIUPA.Domain.DomainServices;
@@ -16,13 +17,14 @@ public sealed class GetMisFichadasQueryHandler : IRequestHandler<GetMisFichadasQ
     private readonly IEmpleadoRepository _empleados;
     private readonly IRelojDataSource _reloj;
     private readonly IMarcaRelojRepository _marcasManuales;
+    private readonly ILogger<GetMisFichadasQueryHandler> _logger;
 
-    public GetMisFichadasQueryHandler(IEmpleadoRepository empleados, IRelojDataSource reloj,
-        IMarcaRelojRepository marcasManuales)
+    public GetMisFichadasQueryHandler(IEmpleadoRepository empleados, IRelojDataSource reloj, IMarcaRelojRepository marcasManuales, ILogger<GetMisFichadasQueryHandler> logger)
     {
         _empleados = empleados;
         _reloj = reloj;
         _marcasManuales = marcasManuales;
+        _logger = logger;
     }
 
     public async Task<MisFichadasDto> Handle(GetMisFichadasQuery request, CancellationToken ct)
@@ -33,9 +35,18 @@ public sealed class GetMisFichadasQueryHandler : IRequestHandler<GetMisFichadasQ
         var desde = new DateTime(request.Anio, request.Mes, 1);
         var hasta = new DateTime(request.Anio, request.Mes, 1).AddMonths(1).AddSeconds(-1);
 
-        var marcas = await _reloj.ObtenerMarcasAsync(empleado.Legajo, desde, hasta, ct);
+        IReadOnlyList<MarcaRelojCruda> marcasReloj;
+        try
+        {
+            marcasReloj = await _reloj.ObtenerMarcasAsync(empleado.Legajo, desde, hasta, ct);
+        }
+        catch (RelojNoDisponibleException ex)
+        {
+            _logger.LogWarning(ex, "Reloj no disponible para legajo {Legajo}, devolviendo solo marcas manuales.", empleado.Legajo);
+            marcasReloj = Array.Empty<MarcaRelojCruda>();
+        }
         var manuales = await _marcasManuales.GetByEmpleadoBetweenAsync(request.EmpleadoId, desde, hasta, ct);
-        var todas = marcas
+        var todas = marcasReloj
             .Concat(manuales.Select(m => new MarcaRelojCruda(empleado.Legajo, m.FechaHora, m.Tipo, m.Origen)))
             .GroupBy(m => (m.FechaHora, m.Tipo))
             .Select(g => g.First())
@@ -49,6 +60,81 @@ public sealed class GetMisFichadasQueryHandler : IRequestHandler<GetMisFichadasQ
             jornadas.Select(j => new JornadaDto(j.Fecha, j.Entrada, j.Salida, j.Horas, j.EsAnomalia)).ToList(),
             new ResumenJornadasDto(resumen.DiasTrabajados, resumen.DiasConAnomalia, resumen.TotalHoras,
                 resumen.PromedioHoras));
+    }
+}
+
+/// <summary>Reporte tabular de las propias fichadas del mes (para exportar PDF/Excel).</summary>
+public sealed record ExportarMisFichadasQuery(Guid EmpleadoId, int Anio, int Mes) : IRequest<ReporteTabularDto>;
+
+public sealed class ExportarMisFichadasQueryHandler : IRequestHandler<ExportarMisFichadasQuery, ReporteTabularDto>
+{
+    private static readonly string[] Dias =
+        ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+    private readonly IEmpleadoRepository _empleados;
+    private readonly IRelojDataSource _reloj;
+    private readonly IMarcaRelojRepository _marcasManuales;
+
+    private readonly ILogger<ExportarMisFichadasQueryHandler> _logger;
+
+    public ExportarMisFichadasQueryHandler(IEmpleadoRepository empleados, IRelojDataSource reloj,
+        IMarcaRelojRepository marcasManuales, ILogger<ExportarMisFichadasQueryHandler> logger)
+    {
+        _empleados = empleados;
+        _reloj = reloj;
+        _marcasManuales = marcasManuales;
+        _logger = logger;
+    }
+
+    public async Task<ReporteTabularDto> Handle(ExportarMisFichadasQuery request, CancellationToken ct)
+    {
+        var empleado = await _empleados.GetByIdAsync(request.EmpleadoId, ct)
+            ?? throw new EntidadNoEncontradaException("El empleado no existe.");
+
+        var desde = new DateTime(request.Anio, request.Mes, 1);
+        var hasta = new DateTime(request.Anio, request.Mes, 1).AddMonths(1).AddSeconds(-1);
+
+        IReadOnlyList<MarcaRelojCruda> marcasReloj;
+        try
+        {
+            marcasReloj = await _reloj.ObtenerMarcasAsync(empleado.Legajo, desde, hasta, ct);
+        }
+        catch (RelojNoDisponibleException ex)
+        {
+            _logger.LogWarning(ex, "Reloj no disponible para export legajo {Legajo}, exportando solo manuales.", empleado.Legajo);
+            marcasReloj = Array.Empty<MarcaRelojCruda>();
+        }
+        var manuales = await _marcasManuales.GetByEmpleadoBetweenAsync(request.EmpleadoId, desde, hasta, ct);
+        var todas = marcasReloj
+            .Concat(manuales.Select(m => new MarcaRelojCruda(empleado.Legajo, m.FechaHora, m.Tipo, m.Origen)))
+            .GroupBy(m => (m.FechaHora, m.Tipo))
+            .Select(g => g.First())
+            .OrderBy(m => m.FechaHora);
+
+        var jornadas = CalculadorJornadas.AgruparEnJornadas(todas.ToList());
+
+        var filas = new List<IReadOnlyList<string>>();
+        foreach (var j in jornadas)
+        {
+            filas.Add(
+            [
+                j.Fecha.ToString("dd/MM/yyyy"), Dias[(int)j.Fecha.DayOfWeek],
+                j.Entrada?.ToString("HH:mm") ?? "-", j.Salida?.ToString("HH:mm") ?? "-",
+                j.Horas is { } h ? $"{(int)h.TotalHours}:{h.Minutes:00}" : "-",
+                j.EsAnomalia ? "Sí" : "-"
+            ]);
+        }
+
+        var resumen = CalculadorJornadas.CalcularResumen(jornadas);
+        var resumenTexto = $"Días trabajados: {resumen.DiasTrabajados} · Horas totales: " +
+                           $"{(int)resumen.TotalHoras.TotalHours}:{resumen.TotalHoras.Minutes:00} · " +
+                           $"Días con anomalía: {resumen.DiasConAnomalia}";
+
+        var nombreMes = new DateTime(request.Anio, request.Mes, 1).ToString("MMMM yyyy", new System.Globalization.CultureInfo("es-AR"));
+
+        return new ReporteTabularDto("Mis fichadas",
+            $"{empleado.Apellido}, {empleado.Nombre} (legajo {empleado.Legajo}) · {nombreMes}",
+            ["Fecha", "Día", "Entrada", "Salida", "Horas", "Anomalía"], filas, resumenTexto);
     }
 }
 
@@ -141,11 +227,15 @@ public sealed class CrearMarcaManualCommandHandler : IRequestHandler<CrearMarcaM
 {
     private readonly IEmpleadoRepository _empleados;
     private readonly IMarcaRelojRepository _marcas;
+    private readonly IRelojDataSource _reloj;
+    private readonly ILogger<CrearMarcaManualCommandHandler> _logger;
 
-    public CrearMarcaManualCommandHandler(IEmpleadoRepository empleados, IMarcaRelojRepository marcas)
+    public CrearMarcaManualCommandHandler(IEmpleadoRepository empleados, IMarcaRelojRepository marcas, IRelojDataSource reloj, ILogger<CrearMarcaManualCommandHandler> logger)
     {
         _empleados = empleados;
         _marcas = marcas;
+        _reloj = reloj;
+        _logger = logger;
     }
 
     public async Task<MarcaManualDto> Handle(CrearMarcaManualCommand request, CancellationToken ct)
@@ -189,8 +279,162 @@ public sealed class CrearMarcaManualCommandHandler : IRequestHandler<CrearMarcaM
         var marca = new MarcaReloj(destino, request.FechaHora, tipo, "manual");
         await _marcas.AddRangeAsync(new[] { marca }, ct);
 
+        // La marca debe quedar registrada en la base del reloj (MSSQL). Si no se logra,
+        // se revierte la copia local y se informa el error: una marca solo en PostgreSQL no cuenta.
+        bool replicada;
+        try
+        {
+            replicada = await _reloj.RegistrarMarcaAsync(empleado.Legajo, request.FechaHora, tipo, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            replicada = false;
+            _logger.LogError(ex, "Error al registrar marca manual en MSSQL para legajo {Legajo}.", empleado.Legajo);
+        }
+
+        if (!replicada)
+        {
+            await _marcas.DeleteAsync(marca, ct);
+            throw new ReglaDeNegocioException(
+                "No se pudo registrar la marca en la base del reloj (MSSQL). No se guardó ningún registro; intentá nuevamente en unos minutos.");
+        }
+
         return new MarcaManualDto(marca.Id, marca.EmpleadoId, marca.FechaHora,
             marca.Tipo == TipoMarca.Entrada ? "entrada" : "salida", marca.Origen ?? "manual");
+    }
+}
+
+/// <summary>Edita una marca manual (fecha/hora y tipo). Staff para cualquier empleado; HomeOffice solo las propias.
+/// Replica el cambio en la base del reloj (MSSQL).</summary>
+public sealed record EditarMarcaManualCommand(
+    Guid EmpleadoIdSolicitante, IReadOnlyCollection<string> RolesSolicitante, Guid MarcaId,
+    DateTime NuevaFechaHora, string Tipo) : IRequest<MarcaManualDto>;
+
+public sealed class EditarMarcaManualCommandHandler : IRequestHandler<EditarMarcaManualCommand, MarcaManualDto>
+{
+    private readonly IEmpleadoRepository _empleados;
+    private readonly IMarcaRelojRepository _marcas;
+    private readonly IRelojDataSource _reloj;
+    private readonly ILogger<EditarMarcaManualCommandHandler> _logger;
+
+    public EditarMarcaManualCommandHandler(IEmpleadoRepository empleados, IMarcaRelojRepository marcas,
+        IRelojDataSource reloj, ILogger<EditarMarcaManualCommandHandler> logger)
+    {
+        _empleados = empleados;
+        _marcas = marcas;
+        _reloj = reloj;
+        _logger = logger;
+    }
+
+    public async Task<MarcaManualDto> Handle(EditarMarcaManualCommand request, CancellationToken ct)
+    {
+        var esStaff = request.RolesSolicitante.Any(r => RolesAutorizadosMarcaManual.Staff.Contains(r));
+        var esHomeOffice = request.RolesSolicitante.Contains("HomeOffice");
+
+        var marca = await _marcas.GetByIdAsync(request.MarcaId, ct)
+            ?? throw new EntidadNoEncontradaException("La marca no existe.");
+        if (marca.Origen != "manual")
+            throw new ReglaDeNegocioException("Solo se pueden modificar marcas cargadas manualmente desde el portal.");
+
+        if (!esStaff && !(esHomeOffice && marca.EmpleadoId == request.EmpleadoIdSolicitante))
+            throw new ReglaDeNegocioException(
+                "No tenés permiso para modificar esta marca. Solo el personal con rol HomeOffice o de administración puede hacerlo.");
+
+        var tipo = request.Tipo.Trim().ToLowerInvariant() switch
+        {
+            "entrada" => TipoMarca.Entrada,
+            "salida" => TipoMarca.Salida,
+            _ => throw new ReglaDeNegocioException("El tipo de marca debe ser 'entrada' o 'salida'.")
+        };
+
+        if (request.NuevaFechaHora > DateTime.Now.AddMinutes(5))
+            throw new ReglaDeNegocioException("No se puede cargar una marca con fecha futura.");
+
+        if (await _marcas.ExisteAsync(marca.EmpleadoId, request.NuevaFechaHora, ct))
+            throw new ReglaDeNegocioException("Ya existe otra marca para ese empleado en esa fecha y hora.");
+
+        var fechaVieja = marca.FechaHora;
+        var tipoViejo = marca.Tipo;
+
+        marca.Editar(request.NuevaFechaHora, tipo);
+        await _marcas.UpdateAsync(marca, ct);
+
+        try
+        {
+            var legajo = (await _empleados.GetByIdAsync(marca.EmpleadoId, ct))?.Legajo;
+            if (legajo is { } legajoValor)
+            {
+                var ok = await _reloj.EditarMarcaAsync(legajoValor, fechaVieja, tipoViejo,
+                    request.NuevaFechaHora, tipo, ct);
+                if (!ok)
+                    _logger.LogWarning("Marca manual {Id} editada en PostgreSQL pero no se replicó en MSSQL (legajo {Legajo}).", marca.Id, legajoValor);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al replicar edición de marca manual {Id} en MSSQL.", marca.Id);
+        }
+
+        return new MarcaManualDto(marca.Id, marca.EmpleadoId, marca.FechaHora,
+            marca.Tipo == TipoMarca.Entrada ? "entrada" : "salida", marca.Origen ?? "manual");
+    }
+}
+
+/// <summary>Elimina una marca manual y su réplica en la base del reloj (MSSQL).</summary>
+public sealed record EliminarMarcaManualCommand(
+    Guid EmpleadoIdSolicitante, IReadOnlyCollection<string> RolesSolicitante, Guid MarcaId) : IRequest<Unit>;
+
+public sealed class EliminarMarcaManualCommandHandler : IRequestHandler<EliminarMarcaManualCommand, Unit>
+{
+    private readonly IEmpleadoRepository _empleados;
+    private readonly IMarcaRelojRepository _marcas;
+    private readonly IRelojDataSource _reloj;
+    private readonly ILogger<EliminarMarcaManualCommandHandler> _logger;
+
+    public EliminarMarcaManualCommandHandler(IEmpleadoRepository empleados, IMarcaRelojRepository marcas,
+        IRelojDataSource reloj, ILogger<EliminarMarcaManualCommandHandler> logger)
+    {
+        _empleados = empleados;
+        _marcas = marcas;
+        _reloj = reloj;
+        _logger = logger;
+    }
+
+    public async Task<Unit> Handle(EliminarMarcaManualCommand request, CancellationToken ct)
+    {
+        var esStaff = request.RolesSolicitante.Any(r => RolesAutorizadosMarcaManual.Staff.Contains(r));
+        var esHomeOffice = request.RolesSolicitante.Contains("HomeOffice");
+
+        var marca = await _marcas.GetByIdAsync(request.MarcaId, ct)
+            ?? throw new EntidadNoEncontradaException("La marca no existe.");
+        if (marca.Origen != "manual")
+            throw new ReglaDeNegocioException("Solo se pueden eliminar marcas cargadas manualmente desde el portal.");
+
+        if (!esStaff && !(esHomeOffice && marca.EmpleadoId == request.EmpleadoIdSolicitante))
+            throw new ReglaDeNegocioException(
+                "No tenés permiso para eliminar esta marca. Solo el personal con rol HomeOffice o de administración puede hacerlo.");
+
+        var fechaHora = marca.FechaHora;
+        var tipo = marca.Tipo;
+
+        await _marcas.DeleteAsync(marca, ct);
+
+        try
+        {
+            var legajo = (await _empleados.GetByIdAsync(marca.EmpleadoId, ct))?.Legajo;
+            if (legajo is { } legajoValor)
+            {
+                var ok = await _reloj.EliminarMarcaAsync(legajoValor, fechaHora, tipo, ct);
+                if (!ok)
+                    _logger.LogWarning("Marca manual {Id} eliminada en PostgreSQL pero no se replicó en MSSQL (legajo {Legajo}).", marca.Id, legajoValor);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al replicar eliminación de marca manual {Id} en MSSQL.", marca.Id);
+        }
+
+        return Unit.Value;
     }
 }
 
@@ -204,9 +448,18 @@ public sealed record GetMarcasManualesQuery(
 
 public sealed class GetMarcasManualesQueryHandler : IRequestHandler<GetMarcasManualesQuery, IReadOnlyList<MarcaManualDto>>
 {
+    private readonly IEmpleadoRepository _empleados;
+    private readonly IRelojDataSource _reloj;
     private readonly IMarcaRelojRepository _marcas;
+    private readonly ILogger<GetMarcasManualesQueryHandler> _logger;
 
-    public GetMarcasManualesQueryHandler(IMarcaRelojRepository marcas) => _marcas = marcas;
+    public GetMarcasManualesQueryHandler(IEmpleadoRepository empleados, IRelojDataSource reloj, IMarcaRelojRepository marcas, ILogger<GetMarcasManualesQueryHandler> logger)
+    {
+        _empleados = empleados;
+        _reloj = reloj;
+        _marcas = marcas;
+        _logger = logger;
+    }
 
     public async Task<IReadOnlyList<MarcaManualDto>> Handle(GetMarcasManualesQuery request, CancellationToken ct)
     {
@@ -216,13 +469,43 @@ public sealed class GetMarcasManualesQueryHandler : IRequestHandler<GetMarcasMan
         var desde = request.Desde.ToDateTime(TimeOnly.MinValue);
         var hasta = request.Hasta.ToDateTime(TimeOnly.MaxValue);
 
-        var marcas = await _marcas.GetByEmpleadoBetweenAsync(destino, desde, hasta, ct);
-        return marcas
-            .Where(m => m.Origen == "manual")
-            .OrderByDescending(m => m.FechaHora)
-            .Select(m => new MarcaManualDto(m.Id, m.EmpleadoId, m.FechaHora,
-                m.Tipo == TipoMarca.Entrada ? "entrada" : "salida", m.Origen ?? "manual"))
-            .ToList();
+        var empleado = await _empleados.GetByIdAsync(destino, ct);
+        if (empleado is null) return Array.Empty<MarcaManualDto>();
+
+        // Fuente de verdad: MSSQL del reloj (checkinout). Fallback a PG solo si el reloj no responde.
+        try
+        {
+            var marcasReloj = await _reloj.ObtenerMarcasAsync(empleado.Legajo, desde, hasta, ct);
+            // Mapa PG para resolver Id de las manuales (para que editar/eliminar siga funcionando)
+            var manualesPg = (await _marcas.GetByEmpleadoBetweenAsync(destino, desde, hasta, ct))
+                .Where(m => m.Origen == "manual")
+                .ToDictionary(m => (m.FechaHora, m.Tipo), m => m.Id);
+
+            return marcasReloj
+                .OrderByDescending(m => m.FechaHora)
+                .Select(m =>
+                {
+                    var tipoStr = m.Tipo == TipoMarca.Entrada ? "entrada" : "salida";
+                    // Si es manual y existe en PG, reutilizar su Id; sino id sintético
+                    var id = manualesPg.TryGetValue((m.FechaHora, m.Tipo), out var pgId) ? pgId : Guid.NewGuid();
+                    var origen = m.Origen ?? (m.Tipo == TipoMarca.Entrada ? "reloj" : "reloj");
+                    // Las manuales del portal tienen SENSORID='WEB' / sn='PORTAL-IUPA'
+                    if (origen == "WEB") origen = "manual";
+                    return new MarcaManualDto(id, destino, m.FechaHora, tipoStr, origen);
+                })
+                .ToList();
+        }
+        catch (RelojNoDisponibleException ex)
+        {
+            _logger.LogWarning(ex, "Reloj no disponible para marcas-manuales legajo {Legajo}, fallback a PG.", empleado.Legajo);
+            var marcas = await _marcas.GetByEmpleadoBetweenAsync(destino, desde, hasta, ct);
+            return marcas
+                .Where(m => m.Origen == "manual")
+                .OrderByDescending(m => m.FechaHora)
+                .Select(m => new MarcaManualDto(m.Id, m.EmpleadoId, m.FechaHora,
+                    m.Tipo == TipoMarca.Entrada ? "entrada" : "salida", m.Origen ?? "manual"))
+                .ToList();
+        }
     }
 }
 

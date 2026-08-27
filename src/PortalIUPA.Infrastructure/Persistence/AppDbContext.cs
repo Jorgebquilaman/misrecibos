@@ -22,6 +22,9 @@ public sealed class AppDbContext : DbContext
     public DbSet<AnuncioLeido> AnunciosLeidos => Set<AnuncioLeido>();
     public DbSet<Notificacion> Notificaciones => Set<Notificacion>();
     public DbSet<CertificadoLaboral> CertificadosLaborales => Set<CertificadoLaboral>();
+    public DbSet<CertificadoCurso> CertificadosCv => Set<CertificadoCurso>();
+    public DbSet<CvExperiencia> CvExperiencias => Set<CvExperiencia>();
+    public DbSet<CvAntecedenteAcademico> CvAntecedentesAcademicos => Set<CvAntecedenteAcademico>();
     public DbSet<AccesoLog> AccesosLog => Set<AccesoLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -39,6 +42,9 @@ public sealed class AppDbContext : DbContext
         ConfigurarAnuncio(modelBuilder);
         ConfigurarNotificacion(modelBuilder);
         ConfigurarCertificado(modelBuilder);
+        ConfigurarCertificadoCv(modelBuilder);
+        ConfigurarCvExperiencia(modelBuilder);
+        ConfigurarCvAntecedenteAcademico(modelBuilder);
         ConfigurarAccesoLog(modelBuilder);
 
         // Los DateTimes del dominio no usan un único Kind (DateTime.Now y DateTime.UtcNow conviven);
@@ -71,6 +77,8 @@ public sealed class AppDbContext : DbContext
             e.HasIndex(x => x.Correo).IsUnique();
             e.Property(x => x.Activo).HasColumnName("activo");
             e.Property(x => x.AreaId).HasColumnName("area_id");
+            e.Property(x => x.CvObservaciones).HasColumnName("cv_observaciones");
+            e.Property(x => x.CvTelefono).HasColumnName("cv_telefono").HasMaxLength(50);
             e.PrimitiveCollection(x => x.Roles).HasColumnName("roles").HasColumnType("integer[]");
             e.HasOne<Area>().WithMany().HasForeignKey(x => x.AreaId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -289,6 +297,60 @@ public sealed class AppDbContext : DbContext
             c.Property(x => x.Estado).HasColumnName("estado");
             c.Property(x => x.ArchivoAdjuntoId).HasColumnName("archivo_adjunto_id");
             c.Property(x => x.FechaSolicitud).HasColumnName("fecha_solicitud");
+        });
+    }
+
+    private static void ConfigurarCertificadoCv(ModelBuilder b)
+    {
+        b.Entity<CertificadoCurso>(c =>
+        {
+            c.ToTable("certificados_cv");
+            c.HasKey(x => x.Id);
+            c.Property(x => x.EmpleadoId).HasColumnName("empleado_id");
+            c.Property(x => x.Nombre).HasColumnName("nombre").HasMaxLength(200).IsRequired();
+            c.Property(x => x.Institucion).HasColumnName("institucion").HasMaxLength(200).IsRequired();
+            c.Property(x => x.Tipo).HasColumnName("tipo");
+            c.Property(x => x.FechaObtencion).HasColumnName("fecha_obtencion");
+            c.Property(x => x.AdjuntoId).HasColumnName("adjunto_id");
+            c.Property(x => x.Estado).HasColumnName("estado");
+            c.Property(x => x.ComentarioRevision).HasColumnName("comentario_revision").HasMaxLength(500);
+            c.Property(x => x.FechaCarga).HasColumnName("fecha_carga");
+            c.HasIndex(x => new { x.EmpleadoId, x.Estado });
+        });
+    }
+
+    private static void ConfigurarCvExperiencia(ModelBuilder b)
+    {
+        b.Entity<CvExperiencia>(c =>
+        {
+            c.ToTable("cv_experiencias");
+            c.HasKey(x => x.Id);
+            c.Property(x => x.EmpleadoId).HasColumnName("empleado_id");
+            c.Property(x => x.Puesto).HasColumnName("puesto").HasMaxLength(200).IsRequired();
+            c.Property(x => x.Institucion).HasColumnName("institucion").HasMaxLength(200).IsRequired();
+            c.Property(x => x.Descripcion).HasColumnName("descripcion");
+            c.Property(x => x.FechaDesde).HasColumnName("fecha_desde");
+            c.Property(x => x.FechaHasta).HasColumnName("fecha_hasta");
+            c.HasIndex(x => new { x.EmpleadoId, x.FechaDesde });
+        });
+    }
+
+    private static void ConfigurarCvAntecedenteAcademico(ModelBuilder b)
+    {
+        b.Entity<CvAntecedenteAcademico>(c =>
+        {
+            c.ToTable("cv_antecedentes_academicos");
+            c.HasKey(x => x.Id);
+            c.Property(x => x.EmpleadoId).HasColumnName("empleado_id");
+            c.Property(x => x.Titulo).HasColumnName("titulo").HasMaxLength(200).IsRequired();
+            c.Property(x => x.Institucion).HasColumnName("institucion").HasMaxLength(200).IsRequired();
+            c.Property(x => x.Nivel).HasColumnName("nivel");
+            c.Property(x => x.Descripcion).HasColumnName("descripcion");
+            c.Property(x => x.FechaDesde).HasColumnName("fecha_desde");
+            c.Property(x => x.FechaHasta).HasColumnName("fecha_hasta");
+            c.Property(x => x.AdjuntoId).HasColumnName("adjunto_id");
+            c.Property(x => x.FechaCarga).HasColumnName("fecha_carga");
+            c.HasIndex(x => new { x.EmpleadoId, x.FechaDesde });
         });
     }
 

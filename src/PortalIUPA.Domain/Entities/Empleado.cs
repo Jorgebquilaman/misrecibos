@@ -16,6 +16,12 @@ public sealed class Empleado
     public bool Activo { get; private set; }
     public List<Rol> Roles { get; private set; } = new();
 
+    /// <summary>Observaciones libres que el empleado agrega a su CV (perfil, habilidades, etc.).</summary>
+    public string? CvObservaciones { get; private set; }
+
+    /// <summary>Teléfono de contacto declarado por el empleado para su CV.</summary>
+    public string? CvTelefono { get; private set; }
+
     private Empleado() { }
 
     public Empleado(int legajo, string nombre, string apellido, Email correo, string? dni = null, string? cuil = null)
@@ -68,4 +74,14 @@ public sealed class Empleado
     public void Activar() => Activo = true;
 
     public void Desactivar() => Activo = false;
+
+    public void EditarObservacionesCv(string? texto) =>
+        CvObservaciones = string.IsNullOrWhiteSpace(texto) ? null : texto.Trim();
+
+    public void EditarTelefonoCv(string? telefono)
+    {
+        if (!string.IsNullOrWhiteSpace(telefono) && telefono.Trim().Length > 50)
+            throw new ArgumentException("El teléfono no puede superar los 50 caracteres.", nameof(telefono));
+        CvTelefono = string.IsNullOrWhiteSpace(telefono) ? null : telefono.Trim();
+    }
 }

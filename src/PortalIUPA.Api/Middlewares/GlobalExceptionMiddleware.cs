@@ -35,6 +35,12 @@ public sealed class GlobalExceptionMiddleware
         {
             await ResponderAsync(context, HttpStatusCode.BadRequest, ex.Message);
         }
+        catch (RelojNoDisponibleException ex)
+        {
+            if (ex.ReintentoEn is { } retry)
+                context.Response.Headers.RetryAfter = ((int)retry.TotalSeconds).ToString();
+            await ResponderAsync(context, HttpStatusCode.ServiceUnavailable, ex.Message);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error no controlado en {Ruta}", context.Request.Path);

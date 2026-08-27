@@ -38,6 +38,24 @@ export default function AdminReportesFichadasPage() {
     [empleados]
   );
 
+  const [busqueda, setBusqueda] = useState('');
+  const [abierto, setAbierto] = useState(false);
+
+  const empleadosFiltrados = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    const base = !q
+      ? empleadosOrdenados
+      : empleadosOrdenados.filter((e) =>
+          `${e.legajo} ${e.apellido} ${e.nombre} ${e.nombre} ${e.apellido}`.toLowerCase().includes(q));
+    return base.slice(0, 50);
+  }, [empleadosOrdenados, busqueda]);
+
+  const seleccionar = (e: EmpleadoDto) => {
+    setLegajo(String(e.legajo));
+    setBusqueda(`${e.legajo} · ${e.apellido}, ${e.nombre}`);
+    setAbierto(false);
+  };
+
   const descargar = async (formato: 'pdf' | 'xlsx') => {
     setError(null);
     setOcupado(true);
@@ -80,16 +98,40 @@ export default function AdminReportesFichadasPage() {
         </div>
 
         {tipo === 'individual' && (
-          <div>
+          <div className="relative">
             <label className="label">Empleado</label>
-            <select value={legajo} onChange={(e) => setLegajo(e.target.value)} className="input">
-              <option value="">Seleccioná un empleado...</option>
-              {empleadosOrdenados.map((e) => (
-                <option key={e.id} value={e.legajo}>
-                  {e.legajo} · {e.apellido}, {e.nombre}
-                </option>
-              ))}
-            </select>
+            <input
+              value={busqueda}
+              onChange={(e) => {
+                if (legajo && e.target.value === '') setLegajo('');
+                setBusqueda(e.target.value);
+                setAbierto(true);
+              }}
+              onFocus={() => setAbierto(true)}
+              onBlur={() => setTimeout(() => setAbierto(false), 150)}
+              placeholder="Escribí apellido, nombre o legajo…"
+              className="input"
+              autoComplete="off"
+            />
+            {abierto && (
+              <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-soft bg-[var(--chart-tooltip-bg)] py-1 shadow-xl">
+                {empleadosFiltrados.map((e) => (
+                  <li key={e.id}>
+                    <button
+                      type="button"
+                      onMouseDown={(ev) => { ev.preventDefault(); seleccionar(e); }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-[var(--chart-cursor)]"
+                    >
+                      <span className="w-12 shrink-0 text-ink-secondary">{e.legajo}</span>
+                      <span>{e.apellido}, {e.nombre}</span>
+                    </button>
+                  </li>
+                ))}
+                {!empleadosFiltrados.length && (
+                  <li className="px-3 py-2 text-sm text-ink-secondary">Sin coincidencias.</li>
+                )}
+              </ul>
+            )}
           </div>
         )}
 

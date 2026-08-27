@@ -1,24 +1,56 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { Download, RefreshCw } from 'lucide-react';
 import { fichadasApi } from '../api';
 import type { MisFichadasDto } from '../types';
-import { formatFecha, mesActual } from '../utils';
+import { descargarBlob, formatFecha, mesActual } from '../utils';
 
 export default function FichadasPage() {
   const [datos, setDatos] = useState<MisFichadasDto | null>(null);
   const [anio, setAnio] = useState(mesActual().anio);
   const [mes, setMes] = useState(mesActual().mes);
+  const [exportando, setExportando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cargando, setCargando] = useState(true);
+
+  const cargar = async (a: number, m: number) => {
+    setCargando(true);
+    setError(null);
+    try {
+      const d = await fichadasApi.mias(a, m);
+      setDatos(d);
+    } catch (e: any) {
+      const status = e.response?.status;
+      const msg = e.response?.data?.error ?? 'No se pudo consultar el reloj (MSSQL).';
+      setError(status === 503 ? `${msg} Reintente en unos minutos.` : msg);
+      setDatos(null);
+    } finally {
+      setCargando(false);
+    }
+  };
 
   useEffect(() => {
-    fichadasApi.mias(anio, mes).then(setDatos).catch(() => {});
+    cargar(anio, mes);
   }, [anio, mes]);
+
+  const exportar = async (formato: 'pdf' | 'xlsx') => {
+    setExportando(true);
+    setError(null);
+    try {
+      const blob = await fichadasApi.exportar(anio, mes, formato);
+      descargarBlob(blob, `Fichadas_${anio}_${String(mes).padStart(2, '0')}.${formato}`);
+    } catch (e: any) {
+      setError(e.response?.data?.error ?? 'No se pudo exportar el reporte.');
+    } finally {
+      setExportando(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Mis fichadas</h1>
-          <p className="text-sm text-ink-secondary">Marcas de entrada/salida sincronizadas con el reloj.</p>
+          <p className="text-sm text-ink-secondary">Lectura en vivo del reloj biométrico (MSSQL) — entrada/salida por día.</p>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -34,8 +66,25 @@ export default function FichadasPage() {
           <button onClick={() => { setAnio(mesActual().anio); setMes(mesActual().mes); }} className="btn-secondary">
             <RefreshCw size={16} /> Este mes
           </button>
+          <button onClick={() => exportar('pdf')} disabled={exportando} className="btn-primary">
+            <Download size={16} /> {exportando ? 'Generando...' : 'PDF'}
+          </button>
+          <button onClick={() => exportar('xlsx')} disabled={exportando} className="btn-secondary">
+            <Download size={16} /> Excel
+          </button>
         </div>
       </div>
+
+      {error && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg tint-danger px-3 py-2 text-sm">
+          <span>{error}</span>
+          <button onClick={() => cargar(anio, mes)} className="btn-secondary !py-1 text-xs">
+            <RefreshCw size={14} /> Reintentar
+          </button>
+        </div>
+      )}
+
+      {cargando && !datos && !error && <p className="text-sm text-ink-secondary">Cargando fichadas del reloj...</p>}
 
       {datos && (
         <>

@@ -11,4 +11,7 @@ public interface IMarcaRelojRepository
         DateTime hasta, CancellationToken ct = default);
     Task<DateTime?> GetMaxFechaHoraAsync(CancellationToken ct = default);
     Task<bool> ExisteAsync(Guid empleadoId, DateTime fechaHora, CancellationToken ct = default);
+    Task<MarcaReloj?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task UpdateAsync(MarcaReloj marca, CancellationToken ct = default);
+    Task DeleteAsync(MarcaReloj marca, CancellationToken ct = default);
 }

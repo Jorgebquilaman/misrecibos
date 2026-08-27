@@ -3,6 +3,7 @@ using PortalIUPA.Application.Common;
 using PortalIUPA.Application.DTOs;
 using PortalIUPA.Application.Services;
 using PortalIUPA.Domain.DomainServices;
+using PortalIUPA.Domain.Entities;
 using PortalIUPA.Domain.Enums;
 using PortalIUPA.Domain.Ports;
 
@@ -16,23 +17,38 @@ public sealed class GetDashboardEmpleadoQueryHandler : IRequestHandler<GetDashbo
     private readonly IPeriodoRepository _periodos;
     private readonly IDescargaReciboRepository _descargas;
     private readonly ISolicitudLicenciaRepository _solicitudes;
+    private readonly ITipoLicenciaRepository _tiposLicencia;
     private readonly IRelojDataSource _reloj;
+    private readonly IMarcaRelojRepository _marcasManuales;
     private readonly IAnuncioRepository _anuncios;
     private readonly IAnuncioLeidoRepository _leidos;
     private readonly INotificacionRepository _notificaciones;
+    private readonly ICvExperienciaRepository _experiencias;
+    private readonly ICvAntecedenteAcademicoRepository _antecedentes;
+    private readonly ICertificadoCvRepository _certificadosCv;
+    private readonly ICertificadoLaboralRepository _certificados;
 
     public GetDashboardEmpleadoQueryHandler(IEmpleadoRepository empleados, IPeriodoRepository periodos,
-        IDescargaReciboRepository descargas, ISolicitudLicenciaRepository solicitudes, IRelojDataSource reloj,
-        IAnuncioRepository anuncios, IAnuncioLeidoRepository leidos, INotificacionRepository notificaciones)
+        IDescargaReciboRepository descargas, ISolicitudLicenciaRepository solicitudes, ITipoLicenciaRepository tiposLicencia,
+        IRelojDataSource reloj, IMarcaRelojRepository marcasManuales,
+        IAnuncioRepository anuncios, IAnuncioLeidoRepository leidos, INotificacionRepository notificaciones,
+        ICvExperienciaRepository experiencias, ICvAntecedenteAcademicoRepository antecedentes,
+        ICertificadoCvRepository certificadosCv, ICertificadoLaboralRepository certificados)
     {
         _empleados = empleados;
         _periodos = periodos;
         _descargas = descargas;
         _solicitudes = solicitudes;
+        _tiposLicencia = tiposLicencia;
         _reloj = reloj;
+        _marcasManuales = marcasManuales;
         _anuncios = anuncios;
         _leidos = leidos;
         _notificaciones = notificaciones;
+        _experiencias = experiencias;
+        _antecedentes = antecedentes;
+        _certificadosCv = certificadosCv;
+        _certificados = certificados;
     }
 
     public async Task<DashboardEmpleadoDto> Handle(GetDashboardEmpleadoQuery request, CancellationToken ct)
@@ -58,13 +74,18 @@ public sealed class GetDashboardEmpleadoQueryHandler : IRequestHandler<GetDashbo
         var aprobadas = solicitudes.Count(s => s.Estado == EstadoSolicitud.Aprobada);
         var rechazadas = solicitudes.Count(s => s.Estado == EstadoSolicitud.Desaprobada);
 
-        // Fichadas del mes actual (lectura en vivo del reloj)
+        // Fichadas del mes actual (lectura en vivo del MSSQL del reloj + manuales PG)
         ResumenJornadasDto? fichadas = null;
         {
             var mesActual = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-            var marcas = await _reloj.ObtenerMarcasAsync(empleado.Legajo, mesActual,
-                mesActual.AddMonths(1).AddSeconds(-1), ct);
-            var resumen = CalculadorJornadas.CalcularResumen(CalculadorJornadas.AgruparEnJornadas(marcas));
+            var hastaMes = mesActual.AddMonths(1).AddSeconds(-1);
+            IReadOnlyList<MarcaRelojCruda> marcas;
+            try { marcas = await _reloj.ObtenerMarcasAsync(empleado.Legajo, mesActual, hastaMes, ct); }
+            catch (RelojNoDisponibleException) { marcas = Array.Empty<MarcaRelojCruda>(); }
+            var manuales = await _marcasManuales.GetByEmpleadoBetweenAsync(empleado.Id, mesActual, hastaMes, ct);
+            var todas = marcas.Concat(manuales.Select(m => new MarcaRelojCruda(empleado.Legajo, m.FechaHora, m.Tipo, m.Origen)))
+                .GroupBy(m => (m.FechaHora, m.Tipo)).Select(g => g.First()).OrderBy(m => m.FechaHora).ToList();
+            var resumen = CalculadorJornadas.CalcularResumen(CalculadorJornadas.AgruparEnJornadas(todas));
             fichadas = new ResumenJornadasDto(resumen.DiasTrabajados, resumen.DiasConAnomalia, resumen.TotalHoras,
                 resumen.PromedioHoras);
         }
@@ -83,7 +104,96 @@ public sealed class GetDashboardEmpleadoQueryHandler : IRequestHandler<GetDashbo
 
         var noLeidas = await _notificaciones.GetNoLeidasCountAsync(empleado.Id, ct);
 
-        return new DashboardEmpleadoDto(ultimoRecibo, pendientes, aprobadas, rechazadas, fichadas, feed, noLeidas);
+        // Recibos detallado
+        DashboardRecibosDto? recibosDto = null;
+        try
+        {
+            var disponibles = new List<ReciboDisponibleDto>();
+            foreach (var p in periodos)
+            {
+                var ult = await _descargas.GetUltimaDeEmpleadoEnPeriodoAsync(empleado.Id, p.Id, ct);
+                disponibles.Add(new ReciboDisponibleDto(p.Id, p.Codigo, p.Descripcion, ult is not null, ult?.FechaHora));
+            }
+            var descargados = disponibles.Count(d => d.YaDescargado);
+            recibosDto = new DashboardRecibosDto(periodos.Count, descargados, periodos.Count - descargados, disponibles);
+        }
+        catch { }
+
+        // Licencias detallado + consumo mes actual
+        DashboardLicenciasDto? licenciasDto = null;
+        try
+        {
+            var canceladas = solicitudes.Count(s => s.Estado == EstadoSolicitud.Cancelada);
+            var consumo = new List<ConsumoTipoLicenciaDto>();
+            var tiposActivos = await _tiposLicencia.GetActivosAsync(ct);
+            var anio = DateTime.Today.Year;
+            var mes = DateTime.Today.Month;
+            foreach (var t in tiposActivos)
+            {
+                var (cMes, cAnio) = await _solicitudes.GetConsumoAsync(empleado.Id, t.Id, anio, mes, ct);
+                consumo.Add(new ConsumoTipoLicenciaDto(t.Id, t.Nombre, cMes, cAnio, t.LimiteMensual, t.LimiteAnual));
+            }
+            licenciasDto = new DashboardLicenciasDto(pendientes, aprobadas, rechazadas, canceladas, consumo);
+        }
+        catch { }
+
+        // Fichadas detallado (con faltas y tardanzas)
+        DashboardFichadasDetalladoDto? fichadasDetallado = null;
+        try
+        {
+            if (fichadas is not null)
+            {
+                var mesActual = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+                var hastaMes = mesActual.AddMonths(1).AddSeconds(-1);
+                IReadOnlyList<MarcaRelojCruda> marcasDetallado;
+                try { marcasDetallado = await _reloj.ObtenerMarcasAsync(empleado.Legajo, mesActual, hastaMes, ct); }
+                catch (RelojNoDisponibleException) { marcasDetallado = Array.Empty<MarcaRelojCruda>(); }
+                // merge manuales por si reloj caído ya devolvió vacío, igual usamos fichadas base
+                var manualesDet = await _marcasManuales.GetByEmpleadoBetweenAsync(empleado.Id, mesActual, hastaMes, ct);
+                var todasDet = marcasDetallado.Concat(manualesDet.Select(m => new MarcaRelojCruda(empleado.Legajo, m.FechaHora, m.Tipo, m.Origen))).GroupBy(m => (m.FechaHora, m.Tipo)).Select(g => g.First()).OrderBy(m => m.FechaHora).ToList();
+                var jornadasDet = CalculadorJornadas.AgruparEnJornadas(todasDet);
+                var resumenDet = CalculadorJornadas.CalcularResumen(jornadasDet);
+                var diasHabiles = Enumerable.Range(1, DateTime.DaysInMonth(mesActual.Year, mesActual.Month))
+                    .Select(d => new DateTime(mesActual.Year, mesActual.Month, d))
+                    .Count(d => d.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday);
+                var faltas = Math.Max(0, diasHabiles - resumenDet.DiasTrabajados);
+                var tardanzas = jornadasDet.Count(j => j.Entrada is { } e && e.TimeOfDay > new TimeSpan(8, 30, 0));
+                fichadasDetallado = new DashboardFichadasDetalladoDto(resumenDet.DiasTrabajados, resumenDet.DiasConAnomalia, faltas, tardanzas, resumenDet.TotalHoras, resumenDet.PromedioHoras,
+                    jornadasDet.Select(j => new JornadaDto(j.Fecha, j.Entrada, j.Salida, j.Horas, j.EsAnomalia)).ToList());
+            }
+        }
+        catch { }
+
+        // CV
+        DashboardCvDto? cvDto = null;
+        try
+        {
+            var exps = await _experiencias.GetByEmpleadoAsync(empleado.Id, ct);
+            var ants = await _antecedentes.GetByEmpleadoAsync(empleado.Id, ct);
+            var certs = await _certificadosCv.GetByEmpleadoAsync(empleado.Id, ct);
+            var certsVerif = certs.Count(c => c.Estado == EstadoCertificadoCv.Verificado);
+            var porTipo = certs.GroupBy(c => c.Tipo.ToString()).Select(g => new CertificadoCvResumenDto(g.Key, g.Count())).ToList();
+            var completitud = 0.0;
+            if (!string.IsNullOrWhiteSpace(empleado.CvObservaciones)) completitud += 25;
+            if (!string.IsNullOrWhiteSpace(empleado.CvTelefono)) completitud += 15;
+            if (exps.Count > 0) completitud += 20;
+            if (certs.Count > 0) completitud += 20;
+            if (ants.Count > 0) completitud += 20;
+            cvDto = new DashboardCvDto(exps.Count, ants.Count, certs.Count, certsVerif, completitud, porTipo);
+        }
+        catch { }
+
+        // Certificados laborales
+        DashboardCertificadosDto? certsDto = null;
+        try
+        {
+            var certsLab = await _certificados.GetByEmpleadoAsync(empleado.Id, ct);
+            certsDto = new DashboardCertificadosDto(certsLab.Count, certsLab.Count(c => c.ArchivoAdjuntoId != null));
+        }
+        catch { }
+
+        return new DashboardEmpleadoDto(ultimoRecibo, pendientes, aprobadas, rechazadas, fichadas, feed, noLeidas,
+            recibosDto, licenciasDto, fichadasDetallado, cvDto, certsDto);
     }
 }
 

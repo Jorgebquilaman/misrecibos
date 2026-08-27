@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PortalIUPA.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using PortalIUPA.Infrastructure.Persistence;
 namespace PortalIUPA.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260826000912_AddCvObservaciones")]
+    partial class AddCvObservaciones
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -373,100 +376,6 @@ namespace PortalIUPA.Infrastructure.Migrations
                     b.ToTable("certificados_laborales", (string)null);
                 });
 
-            modelBuilder.Entity("PortalIUPA.Domain.Entities.CvAntecedenteAcademico", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AdjuntoId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("adjunto_id");
-
-                    b.Property<string>("Descripcion")
-                        .HasColumnType("text")
-                        .HasColumnName("descripcion");
-
-                    b.Property<Guid>("EmpleadoId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("empleado_id");
-
-                    b.Property<DateTime>("FechaCarga")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("fecha_carga");
-
-                    b.Property<DateOnly>("FechaDesde")
-                        .HasColumnType("date")
-                        .HasColumnName("fecha_desde");
-
-                    b.Property<DateOnly?>("FechaHasta")
-                        .HasColumnType("date")
-                        .HasColumnName("fecha_hasta");
-
-                    b.Property<string>("Institucion")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("institucion");
-
-                    b.Property<int>("Nivel")
-                        .HasColumnType("integer")
-                        .HasColumnName("nivel");
-
-                    b.Property<string>("Titulo")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("titulo");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EmpleadoId", "FechaDesde");
-
-                    b.ToTable("cv_antecedentes_academicos", (string)null);
-                });
-
-            modelBuilder.Entity("PortalIUPA.Domain.Entities.CvExperiencia", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Descripcion")
-                        .HasColumnType("text")
-                        .HasColumnName("descripcion");
-
-                    b.Property<Guid>("EmpleadoId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("empleado_id");
-
-                    b.Property<DateOnly>("FechaDesde")
-                        .HasColumnType("date")
-                        .HasColumnName("fecha_desde");
-
-                    b.Property<DateOnly?>("FechaHasta")
-                        .HasColumnType("date")
-                        .HasColumnName("fecha_hasta");
-
-                    b.Property<string>("Institucion")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("institucion");
-
-                    b.Property<string>("Puesto")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("puesto");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EmpleadoId", "FechaDesde");
-
-                    b.ToTable("cv_experiencias", (string)null);
-                });
-
             modelBuilder.Entity("PortalIUPA.Domain.Entities.DescargaRecibo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -535,11 +444,6 @@ namespace PortalIUPA.Infrastructure.Migrations
                     b.Property<string>("CvObservaciones")
                         .HasColumnType("text")
                         .HasColumnName("cv_observaciones");
-
-                    b.Property<string>("CvTelefono")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("cv_telefono");
 
                     b.Property<string>("Dni")
                         .HasMaxLength(20)

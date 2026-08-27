@@ -5,6 +5,10 @@ import type {
   AreaDto,
   AsistenciaAreaDto,
   CertificadoDto,
+  CertificadoCvDto,
+  CertificadoCvAdminDto,
+  ExperienciaCvDto,
+  AntecedenteAcademicoDto,
   ConsumoTipoLicenciaDto,
   DashboardEmpleadoDto,
   DashboardEmpleadorDto,
@@ -60,12 +64,17 @@ export const licenciasApi = {
 export const fichadasApi = {
   mias: (anio: number, mes: number) =>
     api.get<MisFichadasDto>('/fichadas/mias', { params: { anio, mes } }).then((r) => r.data),
+  exportar: (anio: number, mes: number, formato: 'pdf' | 'xlsx') =>
+    api.get<Blob>('/fichadas/mias/exportar', { params: { anio, mes, formato }, responseType: 'blob' }).then((r) => r.data),
   asistencia: (desde: string, hasta: string, areaId?: string) =>
     api.get<AsistenciaAreaDto>('/fichadas/asistencia', { params: { desde, hasta, areaId } }).then((r) => r.data),
   marcasManuales: (params?: { desde?: string; hasta?: string; empleadoId?: string }) =>
     api.get<MarcaManualDto[]>('/fichadas/marcas-manuales', { params }).then((r) => r.data),
   crearMarcaManual: (data: { empleadoId?: string | null; fechaHora: string; tipo: 'entrada' | 'salida' }) =>
     api.post('/fichadas/marcas-manuales', data).then((r) => r.data),
+  editarMarcaManual: (id: string, data: { fechaHora: string; tipo: 'entrada' | 'salida' }) =>
+    api.put(`/fichadas/marcas-manuales/${id}`, data).then((r) => r.data),
+  eliminarMarcaManual: (id: string) => api.delete(`/fichadas/marcas-manuales/${id}`),
   empleadosHomeOffice: () =>
     api.get<HomeOfficeEmpleadoDto[]>('/fichadas/marcas-manuales/empleados').then((r) => r.data)
 };
@@ -94,6 +103,65 @@ export const certificadosApi = {
     const r = await api.post(`/certificados/${id}/descargar`, null, { responseType: 'blob' });
     return r.data as Blob;
   }
+};
+
+export const cvApi = {
+  mios: () => api.get<CertificadoCvDto[]>('/cv-certificados/mios').then((r) => r.data),
+  descargarCv: () =>
+    api.get('/cv-certificados/mi-cv', { responseType: 'blob' }).then((r) => r.data as Blob),
+  observaciones: () =>
+    api.get<{ observaciones: string | null }>('/cv-certificados/observaciones').then((r) => r.data.observaciones),
+  guardarObservaciones: (texto: string | null) =>
+    api.put('/cv-certificados/observaciones', { observaciones: texto }).then((r) => r.data.observaciones as string | null),
+  telefono: () =>
+    api.get<{ telefono: string | null }>('/cv-certificados/telefono').then((r) => r.data.telefono),
+  guardarTelefono: (texto: string | null) =>
+    api.put('/cv-certificados/telefono', { telefono: texto }).then((r) => r.data.telefono as string | null),
+  experiencias: () =>
+    api.get<ExperienciaCvDto[]>('/cv-certificados/experiencias').then((r) => r.data),
+  crearExperiencia: (data: Omit<ExperienciaCvDto, 'id'>) =>
+    api.post('/cv-certificados/experiencias', data).then((r) => r.data as ExperienciaCvDto),
+  editarExperiencia: (id: string, data: Omit<ExperienciaCvDto, 'id'>) =>
+    api.put(`/cv-certificados/experiencias/${id}`, data),
+  eliminarExperiencia: (id: string) => api.delete(`/cv-certificados/experiencias/${id}`),
+  antecedentes: () =>
+    api.get<AntecedenteAcademicoDto[]>('/cv-certificados/antecedentes').then((r) => r.data),
+  crearAntecedente: (data: { titulo: string; institucion: string; nivel: string; descripcion?: string | null; fechaDesde: string; fechaHasta?: string | null; archivo: File }) => {
+    const form = new FormData();
+    form.append('titulo', data.titulo);
+    form.append('institucion', data.institucion);
+    form.append('nivel', data.nivel);
+    if (data.descripcion) form.append('descripcion', data.descripcion);
+    form.append('fechaDesde', data.fechaDesde);
+    if (data.fechaHasta) form.append('fechaHasta', data.fechaHasta);
+    form.append('archivo', data.archivo);
+    return api.post('/cv-certificados/antecedentes', form).then((r) => r.data as AntecedenteAcademicoDto);
+  },
+  editarAntecedente: (id: string, data: { titulo: string; institucion: string; nivel: string; descripcion?: string | null; fechaDesde: string; fechaHasta?: string | null }) =>
+    api.put(`/cv-certificados/antecedentes/${id}`, data),
+  eliminarAntecedente: (id: string) => api.delete(`/cv-certificados/antecedentes/${id}`),
+  descargarAntecedente: async (id: string) => {
+    const r = await api.get(`/cv-certificados/antecedentes/${id}/archivo`, { responseType: 'blob' });
+    return { blob: r.data as Blob, disposition: r.headers['content-disposition'] as string | undefined };
+  },
+  subir: (data: { nombre: string; institucion: string; tipo: string; fechaObtencion: string; archivo: File }) => {
+    const form = new FormData();
+    form.append('nombre', data.nombre);
+    form.append('institucion', data.institucion);
+    form.append('tipo', data.tipo);
+    form.append('fechaObtencion', data.fechaObtencion);
+    form.append('archivo', data.archivo);
+    return api.post('/cv-certificados', form).then((r) => r.data as CertificadoCvDto);
+  },
+  descargarArchivo: async (id: string) => {
+    const r = await api.get(`/cv-certificados/${id}/archivo`, { responseType: 'blob' });
+    return { blob: r.data as Blob, disposition: r.headers['content-disposition'] as string | undefined };
+  },
+  admin: (estado?: string) =>
+    api.get<CertificadoCvAdminDto[]>('/cv-certificados/admin', { params: estado ? { estado } : {} }).then((r) => r.data),
+  revisar: (id: string, verificado: boolean, comentario?: string) =>
+    api.patch(`/cv-certificados/${id}/revisar`, { verificado, comentario }).then((r) => r.data),
+  aprobarTodos: () => api.post('/cv-certificados/admin/aprobar-todos').then((r) => r.data as { aprobados: number })
 };
 
 export const adjuntosApi = {
@@ -152,7 +220,10 @@ export const adminApi = {
   quitarRelacion: (relacionId: string) => api.delete(`/admin/relaciones/${relacionId}`).then((r) => r.data),
 
   estadisticasAccesos: (desde: string, hasta: string) =>
-    api.get('/estadisticas/accesos', { params: { desde, hasta } }).then((r) => r.data)
+    api.get('/estadisticas/accesos', { params: { desde, hasta } }).then((r) => r.data),
+  estadisticasFichadas: (desde: string, hasta: string) =>
+    api.get('/estadisticas/fichadas', { params: { desde, hasta } }).then((r) => r.data),
+  estadisticasGenerales: () => api.get('/estadisticas/generales').then((r) => r.data)
 };
 
 export const dashboardApi = {
