@@ -29,6 +29,7 @@ import AdminRelojesPage from '../pages/admin/AdminRelojesPage';
 import AdminReportesPage from '../pages/admin/AdminReportesPage';
 import MisReportesPage from '../pages/MisReportesPage';
 import AdminDashboardsPage from '../pages/admin/AdminDashboardsPage';
+import AdminDescargaRelojPage from '../pages/admin/AdminDescargaRelojPage';
 import MisDashboardsPage from '../pages/MisDashboardsPage';
 
 function MarcasManualesProtegida() {
@@ -49,6 +50,11 @@ function SoloAdminEdificios() {
 function SoloAdminRelojes() {
   const roles = useAuthStore((s) => s.usuario?.roles);
   return esAdmin(roles) ? <AdminRelojesPage /> : <Navigate to="/" replace />;
+}
+
+function SoloAdminDescargaReloj() {
+  const roles = useAuthStore((s) => s.usuario?.roles);
+  return esAdmin(roles) ? <AdminDescargaRelojPage /> : <Navigate to="/" replace />;
 }
 
 function SoloAdminReportes() {
@@ -128,6 +134,7 @@ export function RouterProvider() {
         <Route path="/admin/trazabilidad" element={<SoloAdminProtegida />} />
         <Route path="/admin/edificios" element={<SoloAdminEdificios />} />
         <Route path="/admin/relojes" element={<SoloAdminRelojes />} />
+        <Route path="/admin/descarga-reloj" element={<SoloAdminDescargaReloj />} />
         <Route path="/admin/reportes" element={<SoloAdminReportes />} />
         <Route path="/reportes" element={<SoloRrhhReportes />} />
         <Route path="/admin/dashboards" element={<SoloAdminDashboards />} />

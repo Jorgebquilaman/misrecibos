@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   Bell,
+  Download,
   Gauge,
   Building2,
   CalendarClock,
@@ -173,6 +174,9 @@ export default function Layout() {
               </NavLink>
               <NavLink to="/admin/relojes" className={linkClase}>
                 <Fingerprint size={18} /> Relojes ZKTeco
+              </NavLink>
+              <NavLink to="/admin/descarga-reloj" className={linkClase}>
+                <Download size={18} /> Descarga de fichadas
               </NavLink>
               <NavLink to="/admin/reportes" className={linkClase}>
                 <BarChart3 size={18} /> Reportes
