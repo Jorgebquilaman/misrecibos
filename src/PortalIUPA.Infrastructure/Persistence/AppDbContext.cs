@@ -25,7 +25,17 @@ public sealed class AppDbContext : DbContext
     public DbSet<CertificadoCurso> CertificadosCv => Set<CertificadoCurso>();
     public DbSet<CvExperiencia> CvExperiencias => Set<CvExperiencia>();
     public DbSet<CvAntecedenteAcademico> CvAntecedentesAcademicos => Set<CvAntecedenteAcademico>();
+    public DbSet<CvExperienciaAdjunto> CvExperienciaAdjuntos => Set<CvExperienciaAdjunto>();
+    public DbSet<CvAntecedenteAdjunto> CvAntecedenteAdjuntos => Set<CvAntecedenteAdjunto>();
+    public DbSet<CvAntecedenteItem> CvAntecedenteItems => Set<CvAntecedenteItem>();
+    public DbSet<CvAntecedenteItemAdjunto> CvItemAdjuntos => Set<CvAntecedenteItemAdjunto>();
+    public DbSet<Edificio> Edificios => Set<Edificio>();
+    public DbSet<RelojZk> RelojesZk => Set<RelojZk>();
+    public DbSet<RelojZkDescarga> RelojesZkDescargas => Set<RelojZkDescarga>();
     public DbSet<AccesoLog> AccesosLog => Set<AccesoLog>();
+    public DbSet<ReporteDefinicion> Reportes => Set<ReporteDefinicion>();
+    public DbSet<ReportePermiso> ReportesPermisos => Set<ReportePermiso>();
+    public DbSet<DashboardDefinicion> Dashboards => Set<DashboardDefinicion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,7 +55,15 @@ public sealed class AppDbContext : DbContext
         ConfigurarCertificadoCv(modelBuilder);
         ConfigurarCvExperiencia(modelBuilder);
         ConfigurarCvAntecedenteAcademico(modelBuilder);
+        ConfigurarCvExperienciaAdjunto(modelBuilder);
+        ConfigurarCvAntecedenteAdjunto(modelBuilder);
+        ConfigurarCvAntecedenteItem(modelBuilder);
+        ConfigurarCvItemAdjunto(modelBuilder);
+        ConfigurarEdificio(modelBuilder);
+        ConfigurarRelojZk(modelBuilder);
         ConfigurarAccesoLog(modelBuilder);
+        ConfigurarReportes(modelBuilder);
+        ConfigurarDashboards(modelBuilder);
 
         // Los DateTimes del dominio no usan un único Kind (DateTime.Now y DateTime.UtcNow conviven);
         // se normalizan a "timestamp without time zone" quitando el Kind, como en la base legacy.
@@ -231,7 +249,107 @@ public sealed class AppDbContext : DbContext
             m.Property(x => x.FechaHora).HasColumnName("fecha_hora");
             m.Property(x => x.Tipo).HasColumnName("tipo_marca");
             m.Property(x => x.Origen).HasColumnName("origen").HasMaxLength(50);
+            m.Property(x => x.Latitud).HasColumnName("latitud");
+            m.Property(x => x.Longitud).HasColumnName("longitud");
+            m.Property(x => x.EdificioId).HasColumnName("edificio_id");
+            m.Property(x => x.EdificioNombre).HasColumnName("edificio_nombre").HasMaxLength(200);
             m.HasIndex(x => new { x.EmpleadoId, x.FechaHora }).IsUnique();
+        });
+    }
+
+    private static void ConfigurarEdificio(ModelBuilder b)
+    {
+        b.Entity<Edificio>(e =>
+        {
+            e.ToTable("edificios");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Nombre).HasColumnName("nombre").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Latitud).HasColumnName("latitud");
+            e.Property(x => x.Longitud).HasColumnName("longitud");
+            e.Property(x => x.RadioMetros).HasColumnName("radio_metros");
+            e.Property(x => x.Activo).HasColumnName("activa");
+        });
+    }
+
+    private static void ConfigurarRelojZk(ModelBuilder b)
+    {
+        b.Entity<RelojZk>(e =>
+        {
+            e.ToTable("relojes_zk");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Nombre).HasColumnName("nombre").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Ip).HasColumnName("ip").HasMaxLength(45).IsRequired();
+            e.Property(x => x.Puerto).HasColumnName("puerto");
+            e.Property(x => x.CommKey).HasColumnName("comm_key");
+            e.Property(x => x.Modo).HasColumnName("modo").HasMaxLength(10).IsRequired();
+            e.Property(x => x.Activo).HasColumnName("activo");
+            e.Property(x => x.UltimaDescarga).HasColumnName("ultima_descarga");
+            e.Property(x => x.UltimaCantidad).HasColumnName("ultima_cantidad");
+        });
+
+        b.Entity<RelojZkDescarga>(e =>
+        {
+            e.ToTable("relojes_zk_descargas");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.RelojZkId).HasColumnName("reloj_zk_id");
+            e.Property(x => x.Fecha).HasColumnName("fecha");
+            e.Property(x => x.Leidas).HasColumnName("leidas");
+            e.Property(x => x.Nuevas).HasColumnName("nuevas");
+            e.Property(x => x.Duplicadas).HasColumnName("duplicadas");
+            e.Property(x => x.LegajosDesconocidos).HasColumnName("legajos_desconocidos");
+            e.Property(x => x.Estado).HasColumnName("estado").HasMaxLength(20).IsRequired();
+            e.Property(x => x.Mensaje).HasColumnName("mensaje").HasMaxLength(500);
+            e.Property(x => x.UsuarioCorreo).HasColumnName("usuario_correo").HasMaxLength(200);
+            e.HasIndex(x => x.Fecha);
+        });
+    }
+
+    private static void ConfigurarReportes(ModelBuilder b)
+    {
+        b.Entity<ReporteDefinicion>(e =>
+        {
+            e.ToTable("reportes");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Nombre).HasColumnName("nombre").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Descripcion).HasColumnName("descripcion").HasMaxLength(1000);
+            e.Property(x => x.QuerySql).HasColumnName("query_sql").IsRequired();
+            e.Property(x => x.DefinicionJson).HasColumnName("definicion").HasColumnType("jsonb");
+            e.Property(x => x.DisenoJson).HasColumnName("diseno").HasColumnType("jsonb");
+            e.Property(x => x.CreadoPorEmail).HasColumnName("creado_por_email").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Conexion).HasColumnName("conexion").HasMaxLength(100).IsRequired().HasDefaultValue(ReporteDefinicion.ConexionPrincipal);
+            e.Property(x => x.Activo).HasColumnName("activo");
+            e.Property(x => x.CreadoEn).HasColumnName("creado_en");
+            e.Property(x => x.ActualizadoEn).HasColumnName("actualizado_en");
+            e.HasMany(x => x.Permisos).WithOne().HasForeignKey(p => p.ReporteId).OnDelete(DeleteBehavior.Cascade);
+            e.Navigation(x => x.Permisos).UsePropertyAccessMode(PropertyAccessMode.Field);
+        });
+
+        b.Entity<ReportePermiso>(e =>
+        {
+            e.ToTable("reportes_permisos");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ReporteId).HasColumnName("reporte_id");
+            e.Property(x => x.Email).HasColumnName("email").HasMaxLength(200);
+            e.Property(x => x.Rol).HasColumnName("rol").HasMaxLength(50);
+            e.HasIndex(x => x.ReporteId);
+        });
+    }
+
+    private static void ConfigurarDashboards(ModelBuilder b)
+    {
+        b.Entity<DashboardDefinicion>(e =>
+        {
+            e.ToTable("dashboards");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Nombre).HasColumnName("nombre").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Descripcion).HasColumnName("descripcion").HasMaxLength(1000);
+            e.Property(x => x.QuerySql).HasColumnName("query_sql").IsRequired();
+            e.Property(x => x.DefinicionJson).HasColumnName("definicion").HasColumnType("jsonb");
+            e.Property(x => x.Conexion).HasColumnName("conexion").HasMaxLength(100).IsRequired().HasDefaultValue(ReporteDefinicion.ConexionPrincipal);
+            e.Property(x => x.CreadoPorEmail).HasColumnName("creado_por_email").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Activo).HasColumnName("activo");
+            e.Property(x => x.CreadoEn).HasColumnName("creado_en");
+            e.Property(x => x.ActualizadoEn).HasColumnName("actualizado_en");
         });
     }
 
@@ -351,6 +469,67 @@ public sealed class AppDbContext : DbContext
             c.Property(x => x.AdjuntoId).HasColumnName("adjunto_id");
             c.Property(x => x.FechaCarga).HasColumnName("fecha_carga");
             c.HasIndex(x => new { x.EmpleadoId, x.FechaDesde });
+        });
+    }
+
+    private static void ConfigurarCvExperienciaAdjunto(ModelBuilder b)
+    {
+        b.Entity<CvExperienciaAdjunto>(c =>
+        {
+            c.ToTable("cv_experiencia_adjuntos");
+            c.HasKey(x => x.Id);
+            c.Property(x => x.ExperienciaId).HasColumnName("experiencia_id");
+            c.Property(x => x.AdjuntoId).HasColumnName("adjunto_id");
+            c.Property(x => x.FechaCarga).HasColumnName("fecha_carga");
+            c.HasIndex(x => x.ExperienciaId);
+            c.HasIndex(x => x.AdjuntoId);
+        });
+    }
+
+    private static void ConfigurarCvAntecedenteAdjunto(ModelBuilder b)
+    {
+        b.Entity<CvAntecedenteAdjunto>(c =>
+        {
+            c.ToTable("cv_antecedente_adjuntos");
+            c.HasKey(x => x.Id);
+            c.Property(x => x.AntecedenteId).HasColumnName("antecedente_id");
+            c.Property(x => x.AdjuntoId).HasColumnName("adjunto_id");
+            c.Property(x => x.FechaCarga).HasColumnName("fecha_carga");
+            c.HasIndex(x => x.AntecedenteId);
+            c.HasIndex(x => x.AdjuntoId);
+        });
+    }
+
+    private static void ConfigurarCvAntecedenteItem(ModelBuilder b)
+    {
+        b.Entity<CvAntecedenteItem>(c =>
+        {
+            c.ToTable("cv_antecedente_items");
+            c.HasKey(x => x.Id);
+            c.Property(x => x.EmpleadoId).HasColumnName("empleado_id");
+            c.Property(x => x.Seccion).HasColumnName("seccion");
+            c.Property(x => x.Categoria).HasColumnName("categoria").HasMaxLength(300).IsRequired();
+            c.Property(x => x.Titulo).HasColumnName("titulo").HasMaxLength(500).IsRequired();
+            c.Property(x => x.Institucion).HasColumnName("institucion").HasMaxLength(300);
+            c.Property(x => x.Descripcion).HasColumnName("descripcion");
+            c.Property(x => x.FechaDesde).HasColumnName("fecha_desde");
+            c.Property(x => x.FechaHasta).HasColumnName("fecha_hasta");
+            c.Property(x => x.FechaCarga).HasColumnName("fecha_carga");
+            c.HasIndex(x => new { x.EmpleadoId, x.Seccion });
+        });
+    }
+
+    private static void ConfigurarCvItemAdjunto(ModelBuilder b)
+    {
+        b.Entity<CvAntecedenteItemAdjunto>(c =>
+        {
+            c.ToTable("cv_item_adjuntos");
+            c.HasKey(x => x.Id);
+            c.Property(x => x.ItemId).HasColumnName("item_id");
+            c.Property(x => x.AdjuntoId).HasColumnName("adjunto_id");
+            c.Property(x => x.FechaCarga).HasColumnName("fecha_carga");
+            c.HasIndex(x => x.ItemId);
+            c.HasIndex(x => x.AdjuntoId);
         });
     }
 

@@ -426,6 +426,114 @@ namespace PortalIUPA.Infrastructure.Migrations
                     b.ToTable("cv_antecedentes_academicos", (string)null);
                 });
 
+            modelBuilder.Entity("PortalIUPA.Domain.Entities.CvAntecedenteAdjunto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AdjuntoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("adjunto_id");
+
+                    b.Property<Guid>("AntecedenteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("antecedente_id");
+
+                    b.Property<DateTime>("FechaCarga")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("fecha_carga");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdjuntoId");
+
+                    b.HasIndex("AntecedenteId");
+
+                    b.ToTable("cv_antecedente_adjuntos", (string)null);
+                });
+
+            modelBuilder.Entity("PortalIUPA.Domain.Entities.CvAntecedenteItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Categoria")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("categoria");
+
+                    b.Property<string>("Descripcion")
+                        .HasColumnType("text")
+                        .HasColumnName("descripcion");
+
+                    b.Property<Guid>("EmpleadoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("empleado_id");
+
+                    b.Property<DateTime>("FechaCarga")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("fecha_carga");
+
+                    b.Property<DateOnly>("FechaDesde")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_desde");
+
+                    b.Property<DateOnly?>("FechaHasta")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_hasta");
+
+                    b.Property<string>("Institucion")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("institucion");
+
+                    b.Property<int>("Seccion")
+                        .HasColumnType("integer")
+                        .HasColumnName("seccion");
+
+                    b.Property<string>("Titulo")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("titulo");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmpleadoId", "Seccion");
+
+                    b.ToTable("cv_antecedente_items", (string)null);
+                });
+
+            modelBuilder.Entity("PortalIUPA.Domain.Entities.CvAntecedenteItemAdjunto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AdjuntoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("adjunto_id");
+
+                    b.Property<DateTime>("FechaCarga")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("fecha_carga");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdjuntoId");
+
+                    b.HasIndex("ItemId");
+
+                    b.ToTable("cv_item_adjuntos", (string)null);
+                });
+
             modelBuilder.Entity("PortalIUPA.Domain.Entities.CvExperiencia", b =>
                 {
                     b.Property<Guid>("Id")
@@ -467,6 +575,91 @@ namespace PortalIUPA.Infrastructure.Migrations
                     b.ToTable("cv_experiencias", (string)null);
                 });
 
+            modelBuilder.Entity("PortalIUPA.Domain.Entities.CvExperienciaAdjunto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AdjuntoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("adjunto_id");
+
+                    b.Property<Guid>("ExperienciaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("experiencia_id");
+
+                    b.Property<DateTime>("FechaCarga")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("fecha_carga");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdjuntoId");
+
+                    b.HasIndex("ExperienciaId");
+
+                    b.ToTable("cv_experiencia_adjuntos", (string)null);
+                });
+
+            modelBuilder.Entity("PortalIUPA.Domain.Entities.DashboardDefinicion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activo");
+
+                    b.Property<DateTime>("ActualizadoEn")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<string>("Conexion")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("PortalIUPA")
+                        .HasColumnName("conexion");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<string>("CreadoPorEmail")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("creado_por_email");
+
+                    b.Property<string>("DefinicionJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("definicion");
+
+                    b.Property<string>("Descripcion")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("descripcion");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nombre");
+
+                    b.Property<string>("QuerySql")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("query_sql");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("dashboards", (string)null);
+                });
+
             modelBuilder.Entity("PortalIUPA.Domain.Entities.DescargaRecibo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -499,6 +692,39 @@ namespace PortalIUPA.Infrastructure.Migrations
                     b.HasIndex("EmpleadoId", "PeriodoId");
 
                     b.ToTable("descargas_recibo", (string)null);
+                });
+
+            modelBuilder.Entity("PortalIUPA.Domain.Entities.Edificio", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activa");
+
+                    b.Property<double>("Latitud")
+                        .HasColumnType("double precision")
+                        .HasColumnName("latitud");
+
+                    b.Property<double>("Longitud")
+                        .HasColumnType("double precision")
+                        .HasColumnName("longitud");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nombre");
+
+                    b.Property<int>("RadioMetros")
+                        .HasColumnType("integer")
+                        .HasColumnName("radio_metros");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("edificios", (string)null);
                 });
 
             modelBuilder.Entity("PortalIUPA.Domain.Entities.Empleado", b =>
@@ -580,6 +806,15 @@ namespace PortalIUPA.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("EdificioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("edificio_id");
+
+                    b.Property<string>("EdificioNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("edificio_nombre");
+
                     b.Property<Guid>("EmpleadoId")
                         .HasColumnType("uuid")
                         .HasColumnName("empleado_id");
@@ -587,6 +822,14 @@ namespace PortalIUPA.Infrastructure.Migrations
                     b.Property<DateTime>("FechaHora")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("fecha_hora");
+
+                    b.Property<double?>("Latitud")
+                        .HasColumnType("double precision")
+                        .HasColumnName("latitud");
+
+                    b.Property<double?>("Longitud")
+                        .HasColumnType("double precision")
+                        .HasColumnName("longitud");
 
                     b.Property<string>("Origen")
                         .HasMaxLength(50)
@@ -718,6 +961,198 @@ namespace PortalIUPA.Infrastructure.Migrations
                     b.ToTable("relaciones_a_cargo", (string)null);
                 });
 
+            modelBuilder.Entity("PortalIUPA.Domain.Entities.RelojZk", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activo");
+
+                    b.Property<int>("CommKey")
+                        .HasColumnType("integer")
+                        .HasColumnName("comm_key");
+
+                    b.Property<string>("Ip")
+                        .IsRequired()
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)")
+                        .HasColumnName("ip");
+
+                    b.Property<string>("Modo")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("modo");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nombre");
+
+                    b.Property<int>("Puerto")
+                        .HasColumnType("integer")
+                        .HasColumnName("puerto");
+
+                    b.Property<int>("UltimaCantidad")
+                        .HasColumnType("integer")
+                        .HasColumnName("ultima_cantidad");
+
+                    b.Property<DateTime?>("UltimaDescarga")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("ultima_descarga");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("relojes_zk", (string)null);
+                });
+
+            modelBuilder.Entity("PortalIUPA.Domain.Entities.RelojZkDescarga", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Duplicadas")
+                        .HasColumnType("integer")
+                        .HasColumnName("duplicadas");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("estado");
+
+                    b.Property<DateTime>("Fecha")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("fecha");
+
+                    b.Property<int>("LegajosDesconocidos")
+                        .HasColumnType("integer")
+                        .HasColumnName("legajos_desconocidos");
+
+                    b.Property<int>("Leidas")
+                        .HasColumnType("integer")
+                        .HasColumnName("leidas");
+
+                    b.Property<string>("Mensaje")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("mensaje");
+
+                    b.Property<int>("Nuevas")
+                        .HasColumnType("integer")
+                        .HasColumnName("nuevas");
+
+                    b.Property<Guid>("RelojZkId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reloj_zk_id");
+
+                    b.Property<string>("UsuarioCorreo")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("usuario_correo");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Fecha");
+
+                    b.ToTable("relojes_zk_descargas", (string)null);
+                });
+
+            modelBuilder.Entity("PortalIUPA.Domain.Entities.ReporteDefinicion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activo");
+
+                    b.Property<DateTime>("ActualizadoEn")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<string>("Conexion")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("PortalIUPA")
+                        .HasColumnName("conexion");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<string>("CreadoPorEmail")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("creado_por_email");
+
+                    b.Property<string>("DefinicionJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("definicion");
+
+                    b.Property<string>("Descripcion")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("descripcion");
+
+                    b.Property<string>("DisenoJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("diseno");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nombre");
+
+                    b.Property<string>("QuerySql")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("query_sql");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("reportes", (string)null);
+                });
+
+            modelBuilder.Entity("PortalIUPA.Domain.Entities.ReportePermiso", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("email");
+
+                    b.Property<Guid>("ReporteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reporte_id");
+
+                    b.Property<string>("Rol")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("rol");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReporteId");
+
+                    b.ToTable("reportes_permisos", (string)null);
+                });
+
             modelBuilder.Entity("PortalIUPA.Domain.Entities.SolicitudLicencia", b =>
                 {
                     b.Property<Guid>("Id")
@@ -828,6 +1263,15 @@ namespace PortalIUPA.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("PortalIUPA.Domain.Entities.ReportePermiso", b =>
+                {
+                    b.HasOne("PortalIUPA.Domain.Entities.ReporteDefinicion", null)
+                        .WithMany("Permisos")
+                        .HasForeignKey("ReporteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("PortalIUPA.Domain.Entities.TipoLicencia", b =>
                 {
                     b.OwnsMany("PortalIUPA.Domain.Entities.NivelAprobacion", "Niveles", b1 =>
@@ -858,6 +1302,11 @@ namespace PortalIUPA.Infrastructure.Migrations
                         });
 
                     b.Navigation("Niveles");
+                });
+
+            modelBuilder.Entity("PortalIUPA.Domain.Entities.ReporteDefinicion", b =>
+                {
+                    b.Navigation("Permisos");
                 });
 #pragma warning restore 612, 618
         }

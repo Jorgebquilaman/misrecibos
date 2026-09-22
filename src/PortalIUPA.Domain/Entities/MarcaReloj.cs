@@ -10,6 +10,10 @@ public sealed class MarcaReloj
     public DateTime FechaHora { get; private set; }
     public TipoMarca Tipo { get; private set; }
     public string? Origen { get; private set; }
+    public double? Latitud { get; private set; }
+    public double? Longitud { get; private set; }
+    public Guid? EdificioId { get; private set; }
+    public string? EdificioNombre { get; private set; }
 
     private MarcaReloj() { }
 
@@ -23,6 +27,15 @@ public sealed class MarcaReloj
     }
 
     public DateOnly Fecha => DateOnly.FromDateTime(FechaHora);
+
+    /// <summary>Registra la ubicación desde la que se cargó una marca manual y el edificio detectado.</summary>
+    public void MarcarUbicacion(double latitud, double longitud, Guid? edificioId, string? edificioNombre)
+    {
+        Latitud = latitud;
+        Longitud = longitud;
+        EdificioId = edificioId;
+        EdificioNombre = edificioNombre;
+    }
 
     /// <summary>Edición de una marca manual (fecha/hora y tipo). Solo aplica a marcas de origen "manual".</summary>
     public void Editar(DateTime fechaHora, TipoMarca tipo)

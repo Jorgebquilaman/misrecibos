@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LogIn, LogOut, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Loader2, LogIn, LogOut, MapPin, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { fichadasApi } from '../api';
 import SelectBusqueda, { type OpcionSelectBusqueda } from '../components/SelectBusqueda';
 import { esResponsable, useAuthStore } from '../store/authStore';
@@ -21,6 +21,32 @@ export default function MarcasManualesPage() {
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editando, setEditando] = useState<{ id: string; fecha: string; hora: string; tipo: 'entrada' | 'salida' } | null>(null);
+  const [geoEstado, setGeoEstado] = useState<'pidiendo' | 'ok' | 'denegada' | 'no-disponible'>('pidiendo');
+  const [cargandoMarca, setCargandoMarca] = useState<'geo' | 'guardando' | null>(null);
+  const [cargandoLista, setCargandoLista] = useState(false);
+
+  const pedirGeolocalizacion = () => {
+    setGeoEstado('pidiendo');
+    if (!('geolocation' in navigator)) {
+      setGeoEstado('no-disponible');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      () => setGeoEstado('ok'),
+      () => setGeoEstado('denegada'),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+    );
+  };
+
+  const obtenerPosicion = () => new Promise<GeolocationPosition>((resolve, reject) => {
+    if (!('geolocation' in navigator)) {
+      reject(new Error('no-disponible'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 15000 });
+  });
+
+  useEffect(() => { pedirGeolocalizacion(); }, []);
 
   const opcionesEmpleados: OpcionSelectBusqueda[] = useMemo(
     () =>
@@ -39,6 +65,7 @@ export default function MarcasManualesPage() {
 
   const cargar = (empleadoId?: string) => {
     const ultimoDia = new Date(anio, mes, 0).getDate();
+    setCargandoLista(true);
     fichadasApi
       .marcasManuales({
         desde: `${anio}-${String(mes).padStart(2, '0')}-01`,
@@ -46,7 +73,8 @@ export default function MarcasManualesPage() {
         empleadoId: esAdmin && empleadoId ? empleadoId : undefined
       })
       .then(setMarcas)
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setCargandoLista(false));
   };
 
   useEffect(() => {
@@ -65,17 +93,34 @@ export default function MarcasManualesPage() {
       setError('Elegí fecha y hora.');
       return;
     }
-    const destino = esAdmin ? (empleadoCarga || usuario?.empleadoId || null) : null;
+    if (cargandoMarca) return;
+    setCargandoMarca('geo');
+    let coords: GeolocationPosition;
     try {
-      await fichadasApi.crearMarcaManual({
+      coords = await obtenerPosicion();
+    } catch {
+      setError('No se pudo obtener tu ubicación. Verificá que la geolocalización esté habilitada en el navegador.');
+      setCargandoMarca(null);
+      return;
+    }
+    const destino = esAdmin ? (empleadoCarga || usuario?.empleadoId || null) : null;
+    setCargandoMarca('guardando');
+    try {
+      const marca = await fichadasApi.crearMarcaManual({
         empleadoId: destino,
         fechaHora: `${fecha}T${hora}:00`,
-        tipo
+        tipo,
+        latitud: coords.coords.latitude,
+        longitud: coords.coords.longitude
       });
-      setMensaje('Marca cargada correctamente.');
+      setMensaje(marca.edificio
+        ? `Marca cargada correctamente — edificio detectado: ${marca.edificio}.`
+        : 'Marca cargada correctamente (fuera del radio de los edificios registrados).');
       cargar(empleadoFiltro);
     } catch (e: any) {
       setError(e.response?.data?.error ?? 'No se pudo cargar la marca.');
+    } finally {
+      setCargandoMarca(null);
     }
   };
 
@@ -132,6 +177,29 @@ export default function MarcasManualesPage() {
       {mensaje && <p className="rounded-lg tint-success px-3 py-2 text-sm">{mensaje}</p>}
       {error && <p className="rounded-lg tint-danger px-3 py-2 text-sm">{error}</p>}
 
+      {geoEstado !== 'ok' && (
+        <div className="rounded-lg border border-danger/40 tint-danger p-4">
+          <p className="font-semibold">Geolocalización requerida</p>
+          <p className="mt-1 text-sm">
+            {geoEstado === 'pidiendo' && 'Solicitando permiso de geolocalización...'}
+            {geoEstado === 'denegada' &&
+              'Para poder usar el servicio de marcas manuales es necesario que habilites la geolocalización en tu navegador. Sin ella no vas a poder registrar marcas.'}
+            {geoEstado === 'no-disponible' &&
+              'Tu navegador o dispositivo no admite geolocalización. Sin ella no vas a poder registrar marcas manuales.'}
+          </p>
+          {geoEstado === 'denegada' && (
+            <button onClick={pedirGeolocalizacion} className="btn-secondary mt-3">
+              <MapPin size={16} /> Reintentar habilitar geolocalización
+            </button>
+          )}
+          {geoEstado === 'denegada' && (
+            <p className="mt-2 text-xs text-ink-secondary">
+              Si el navegador no vuelve a pedir permiso, habilitá la ubicación para este sitio desde el candado/ajustes de la barra de direcciones y recargá la página.
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="card space-y-3">
         <h2 className="font-semibold">Registrar marca</h2>
         {esAdmin && (
@@ -169,10 +237,29 @@ export default function MarcasManualesPage() {
             <label className="label">Hora</label>
             <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="input" />
           </div>
-          <button onClick={crear} className="btn-primary">
-            <Plus size={16} /> Cargar
+          <button
+            onClick={crear}
+            disabled={geoEstado !== 'ok' || cargandoMarca !== null}
+            className={`btn-primary ${geoEstado !== 'ok' || cargandoMarca !== null ? 'opacity-60 cursor-not-allowed' : ''}`}
+            title={geoEstado !== 'ok' ? 'Requiere geolocalización habilitada' : undefined}
+          >
+            {cargandoMarca ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                {cargandoMarca === 'geo' ? 'Obteniendo ubicación...' : 'Guardando...'}
+              </>
+            ) : (
+              <>
+                <Plus size={16} /> Cargar
+              </>
+            )}
           </button>
         </div>
+        {geoEstado === 'ok' && (
+          <p className="flex items-center gap-1 text-xs text-ink-secondary">
+            <MapPin size={12} /> Geolocalización activa: al registrar la marca se asociará al edificio más cercano (radio de detección 100 m aprox.).
+          </p>
+        )}
       </div>
 
       <div className="card">
@@ -204,7 +291,11 @@ export default function MarcasManualesPage() {
             )}
           </div>
         </div>
-        {marcasFiltradas.length === 0 ? (
+        {cargandoLista ? (
+          <p className="flex items-center gap-2 py-4 text-sm text-ink-secondary">
+            <Loader2 size={16} className="animate-spin" /> Cargando marcas...
+          </p>
+        ) : marcasFiltradas.length === 0 ? (
           <p className="text-sm text-ink-secondary">No hay marcas manuales en el período.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -214,6 +305,7 @@ export default function MarcasManualesPage() {
                   <th className="py-2 pr-3">Fecha y hora</th>
                   {esAdmin && <th className="py-2 pr-3">Empleado</th>}
                   <th className="py-2 pr-3">Tipo</th>
+                  <th className="py-2 pr-3">Lugar</th>
                   <th className="py-2 pr-3">Origen</th>
                   <th className="py-2"></th>
                 </tr>
@@ -258,7 +350,35 @@ export default function MarcasManualesPage() {
                         </span>
                       )}
                     </td>
-                    <td className="py-2 pr-3 text-ink-muted">{m.origen}</td>
+                    <td className="py-2 pr-3">
+                      {m.edificio ? (
+                        <span className="inline-flex items-center gap-0.5 rounded-pill bg-black/5 px-1.5 py-0.5 text-xs dark:bg-white/10">
+                          <MapPin size={10} /> {m.edificio}
+                        </span>
+                      ) : m.latitud != null && m.longitud != null ? (
+                        <a
+                          href={`https://www.google.com/maps?q=${m.latitud},${m.longitud}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-0.5 text-xs text-accent underline underline-offset-2"
+                          title="Ver ubicación en el mapa"
+                        >
+                          <MapPin size={10} /> Ver en mapa
+                        </a>
+                      ) : (
+                        <span className="text-ink-muted">—</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3">
+                      <div className="flex flex-wrap items-center gap-1.5 text-ink-muted">
+                        <span>{m.origen}</span>
+                        {m.latitud != null && m.longitud != null && (
+                          <span className="font-mono text-xs">
+                            {m.latitud.toFixed(5)}, {m.longitud.toFixed(5)}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-2">
                       {editando?.id === m.id ? (
                         <div className="flex items-center gap-1">

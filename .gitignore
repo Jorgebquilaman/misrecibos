@@ -39,3 +39,8 @@ storage/
 # Sistema legacy (no forma parte del nuevo portal)
 MisRecibos2/
 MisRecibos2.zip
+# SDK ZKTeco de referencia (terceros) y configuración local del agente
+ejemplos/
+Reloj/
+.agents/
+.opencode/

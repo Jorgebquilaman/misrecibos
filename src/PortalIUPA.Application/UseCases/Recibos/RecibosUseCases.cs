@@ -98,7 +98,7 @@ public sealed class DescargarReciboCommandHandler : IRequestHandler<DescargarRec
 
         await _descargas.AddAsync(new DescargaRecibo(empleado.Id, periodo.Id, request.Origen, request.Ip), ct);
 
-        return new ReciboPdfResult(pdf, $"Recibo_{periodo.Codigo}_{empleado.Legajo}.pdf");
+        return new ReciboPdfResult(pdf, $"Recibo_{periodo.Codigo}_{empleado.Legajo}.pdf", empleado.Legajo);
     }
 }
 

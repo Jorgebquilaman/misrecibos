@@ -59,4 +59,18 @@ public sealed class CertificadoCurso
         Estado = verificado ? EstadoCertificadoCv.Verificado : EstadoCertificadoCv.Observado;
         ComentarioRevision = string.IsNullOrWhiteSpace(comentario) ? null : comentario.Trim();
     }
+
+    /// <summary>Edita los datos del certificado (sin reemplazar el archivo); vuelve a Pendiente para nueva revisión de RRHH.</summary>
+    public void Editar(string nombre, string institucion, TipoEstudio tipo, DateOnly fechaObtencion)
+    {
+        if (string.IsNullOrWhiteSpace(nombre)) throw new ArgumentException("El nombre es obligatorio.", nameof(nombre));
+        if (string.IsNullOrWhiteSpace(institucion)) throw new ArgumentException("La institución es obligatoria.", nameof(institucion));
+
+        Nombre = nombre.Trim();
+        Institucion = institucion.Trim();
+        Tipo = tipo;
+        FechaObtencion = fechaObtencion;
+        Estado = EstadoCertificadoCv.Pendiente;
+        ComentarioRevision = null;
+    }
 }

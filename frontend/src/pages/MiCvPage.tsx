@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Download, Eye, FileDown, FileUp, Pencil, Plus, Trash2 } from 'lucide-react';
 import { cvApi } from '../api';
-import type { AntecedenteAcademicoDto, CertificadoCvDto, ExperienciaCvDto } from '../types';
+import type { AntecedenteAcademicoDto, CertificadoCvDto, CvItemDto, ExperienciaCvDto } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { descargarBlob, formatFecha, formatFechaHora } from '../utils';
 import VisorArchivo, { type ArchivoParaVer } from '../components/VisorArchivo';
+import CvItemsSection from '../components/CvItemsSection';
 
 const TIPOS = [
   { valor: 'Curso', nombre: 'Curso' },
@@ -31,13 +32,36 @@ const ETIQUETA_ESTADO_CV: Record<string, string> = {
   Observado: 'Observado'
 };
 
-type Solapa = 'resumen' | 'experiencia' | 'antecedentes' | 'certificados';
+type Solapa = 'resumen' | 'experiencia' | 'antecedentes' | 'prof-artisticos' | 'produccion' | 'otros-antecedentes' | 'certificados';
 
 const SOLAPAS: { id: Solapa; nombre: string }[] = [
   { id: 'resumen', nombre: 'Resumen y datos' },
   { id: 'experiencia', nombre: 'Experiencia profesional' },
   { id: 'antecedentes', nombre: 'Antecedentes académicos' },
+  { id: 'prof-artisticos', nombre: 'Antecedentes prof. y/o artísticos' },
+  { id: 'produccion', nombre: 'Producción' },
+  { id: 'otros-antecedentes', nombre: 'Otros antecedentes' },
   { id: 'certificados', nombre: 'Certificados' }
+];
+
+const CATEGORIAS_PROF_ART = [
+  'Producciones artísticas, participación en proyectos, congresos, festivales, muestras, etc.',
+  'Participación en Proyectos de Investigación',
+  'Participación en Proyectos de Extensión',
+  'Formación de Recursos Humanos',
+  'Evaluación (integración de jurados, comités evaluadores, etc.)',
+  'Becas, estancias y pasantías',
+  'Participación y/o organización de jornadas, congresos, etc.'
+];
+
+const CATEGORIAS_PRODUCCION = [
+  'Tesis',
+  'Libros',
+  'Partes de Libros',
+  'Artículos publicados en revistas',
+  'Material didáctico sistematizado',
+  'Trabajo en eventos científicos tecnológicos publicados',
+  'Trabajos en eventos científicos tecnológicos sin publicación'
 ];
 
 export default function MiCvPage() {
@@ -48,6 +72,7 @@ export default function MiCvPage() {
   const [tipo, setTipo] = useState('Curso');
   const [fechaObtencion, setFechaObtencion] = useState('');
   const [archivo, setArchivo] = useState<File | null>(null);
+  const [certEditandoId, setCertEditandoId] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -58,8 +83,9 @@ export default function MiCvPage() {
   const [telefono, setTelefono] = useState<string>('');
   const [guardandoTel, setGuardandoTel] = useState(false);
   const [experiencias, setExperiencias] = useState<ExperienciaCvDto[]>([]);
-  const [expForm, setExpForm] = useState<{ id?: string; puesto: string; institucion: string; descripcion: string; fechaDesde: string; fechaHasta: string; actualidad: boolean } | null>(null);
+  const [expForm, setExpForm] = useState<{ id?: string; puesto: string; institucion: string; descripcion: string; fechaDesde: string; fechaHasta: string; actualidad: boolean; archivos: File[] } | null>(null);
   const [antecedentes, setAntecedentes] = useState<AntecedenteAcademicoDto[]>([]);
+  const [itemsCv, setItemsCv] = useState<CvItemDto[]>([]);
   const [antForm, setAntForm] = useState<{ id?: string; titulo: string; institucion: string; nivel: string; descripcion: string; fechaDesde: string; fechaHasta: string; enCurso: boolean; archivo: File | null } | null>(null);
   const [solapa, setSolapa] = useState<Solapa>('resumen');
 
@@ -69,35 +95,79 @@ export default function MiCvPage() {
     cvApi.telefono().then((t) => setTelefono(t ?? '')).catch(() => {});
     cvApi.experiencias().then(setExperiencias).catch(() => {});
     cvApi.antecedentes().then(setAntecedentes).catch(() => {});
+    cvApi.items().then(setItemsCv).catch(() => {});
   };
 
   useEffect(() => { cargar(); }, []);
 
   const subir = async () => {
-    if (!nombre.trim() || !institucion.trim() || !fechaObtencion || !archivo) {
-      setError('Completá nombre, institución, fecha y archivo del certificado.');
+    if (!nombre.trim() || !institucion.trim() || !fechaObtencion) {
+      setError('Completá nombre, institución y fecha del certificado.');
       return;
     }
-    if (archivo.size > 10 * 1024 * 1024) {
+    if (!certEditandoId && !archivo) {
+      setError('Adjuntá el archivo del certificado.');
+      return;
+    }
+    if (!certEditandoId && archivo && archivo.size > 10 * 1024 * 1024) {
       setError('El archivo supera los 10 MB.');
       return;
     }
     setEnviando(true);
     setError(null);
     try {
-      await cvApi.subir({ nombre, institucion, tipo, fechaObtencion, archivo });
-      setMensaje('Certificado subido. RR.HH. lo va a revisar.');
+      if (certEditandoId) {
+        await cvApi.editar(certEditandoId, { nombre, institucion, tipo, fechaObtencion });
+        setMensaje('Certificado actualizado. Volvió a revisión de RR.HH.');
+      } else {
+        await cvApi.subir({ nombre, institucion, tipo, fechaObtencion, archivo: archivo! });
+        setMensaje('Certificado subido. RR.HH. lo va a revisar.');
+      }
       setNombre('');
       setInstitucion('');
       setFechaObtencion('');
       setArchivo(null);
+      setCertEditandoId(null);
       (document.getElementById('cv-archivo') as HTMLInputElement | null)?.value && ((document.getElementById('cv-archivo') as HTMLInputElement).value = '');
       cargar();
     } catch (e: any) {
-      setError(e.response?.data?.error ?? 'No se pudo subir el certificado.');
+      setError(e.response?.data?.error ?? 'No se pudo guardar el certificado.');
     } finally {
       setEnviando(false);
     }
+  };
+
+  const editarCertificado = (c: CertificadoCvDto) => {
+    setError(null);
+    setCertEditandoId(c.id);
+    setNombre(c.nombre);
+    setInstitucion(c.institucion);
+    setTipo(c.tipo);
+    setFechaObtencion(c.fechaObtencion.slice(0, 10));
+    setArchivo(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const eliminarCertificado = async (id: string) => {
+    if (!confirm('¿Eliminar este certificado? También se borra el archivo adjunto.')) return;
+    setError(null);
+    try {
+      await cvApi.eliminar(id);
+      setMensaje('Certificado eliminado.');
+      cargar();
+    } catch (e: any) {
+      setError(e.response?.data?.error ?? 'No se pudo eliminar el certificado.');
+    }
+  };
+
+  const cancelarEdicionCert = () => {
+    setCertEditandoId(null);
+    setNombre('');
+    setInstitucion('');
+    setFechaObtencion('');
+    setArchivo(null);
+    const input = document.getElementById('cv-archivo') as HTMLInputElement | null;
+    if (input) input.value = '';
   };
 
   const descargar = async (id: string) => {
@@ -162,8 +232,18 @@ export default function MiCvPage() {
       fechaHasta: expForm.actualidad ? null : (expForm.fechaHasta || null)
     };
     try {
-      if (expForm.id) await cvApi.editarExperiencia(expForm.id, data);
-      else await cvApi.crearExperiencia(data);
+      let id = expForm.id;
+      if (id) {
+        await cvApi.editarExperiencia(id, data);
+      } else {
+        const nueva = await cvApi.crearExperiencia(data);
+        id = nueva.id;
+      }
+      if (id && expForm.archivos.length > 0) {
+        for (const f of expForm.archivos) {
+          await cvApi.subirExperienciaAdjunto(id, f);
+        }
+      }
       setMensaje('Experiencia guardada. Se incluye en tu CV.');
       setExpForm(null);
       cargar();
@@ -182,6 +262,43 @@ export default function MiCvPage() {
     } catch (e: any) {
       setError(e.response?.data?.error ?? 'No se pudo eliminar la experiencia.');
     }
+  };
+
+  const verExperienciaAdjunto = async (experienciaId: string, adjuntoId: string, nombreArchivo: string) => {
+    setError(null);
+    try {
+      const { blob } = await cvApi.descargarExperienciaAdjunto(experienciaId, adjuntoId);
+      setViendo({ blob, nombre: nombreArchivo });
+    } catch (e: any) {
+      setError(e.response?.data?.error ?? 'No se pudo abrir el anexo.');
+    }
+  };
+
+  const descargarExperienciaAdjunto = async (experienciaId: string, adjuntoId: string, nombreArchivo: string) => {
+    try {
+      const { blob } = await cvApi.descargarExperienciaAdjunto(experienciaId, adjuntoId);
+      descargarBlob(blob, nombreArchivo || `anexo_${adjuntoId}.pdf`);
+    } catch (e: any) {
+      setError(e.response?.data?.error ?? 'No se pudo descargar el anexo.');
+    }
+  };
+
+  const eliminarExperienciaAdjunto = async (experienciaId: string, adjuntoId: string) => {
+    if (!confirm('¿Eliminar este anexo?')) return;
+    setError(null);
+    try {
+      await cvApi.eliminarExperienciaAdjunto(experienciaId, adjuntoId);
+      setMensaje('Anexo eliminado.');
+      cargar();
+    } catch (e: any) {
+      setError(e.response?.data?.error ?? 'No se pudo eliminar el anexo.');
+    }
+  };
+
+  const tamanoLegible = (bytes: number) => {
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${bytes} B`;
   };
 
   const guardarAntecedente = async () => {
@@ -306,6 +423,15 @@ export default function MiCvPage() {
             {s.id === 'antecedentes' && antecedentes.length > 0 && (
               <span className="rounded-pill bg-black/10 px-1.5 text-xs dark:bg-white/10">{antecedentes.length}</span>
             )}
+            {s.id === 'prof-artisticos' && itemsCv.filter((x) => x.seccion === 'antecedentes-prof-artisticos').length > 0 && (
+              <span className="rounded-pill bg-black/10 px-1.5 text-xs dark:bg-white/10">{itemsCv.filter((x) => x.seccion === 'antecedentes-prof-artisticos').length}</span>
+            )}
+            {s.id === 'produccion' && itemsCv.filter((x) => x.seccion === 'produccion').length > 0 && (
+              <span className="rounded-pill bg-black/10 px-1.5 text-xs dark:bg-white/10">{itemsCv.filter((x) => x.seccion === 'produccion').length}</span>
+            )}
+            {s.id === 'otros-antecedentes' && itemsCv.filter((x) => x.seccion === 'otros-antecedentes').length > 0 && (
+              <span className="rounded-pill bg-black/10 px-1.5 text-xs dark:bg-white/10">{itemsCv.filter((x) => x.seccion === 'otros-antecedentes').length}</span>
+            )}
             {s.id === 'certificados' && mios.length > 0 && (
               <span className="rounded-pill bg-black/10 px-1.5 text-xs dark:bg-white/10">{mios.length}</span>
             )}
@@ -357,7 +483,7 @@ export default function MiCvPage() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">Experiencia profesional ({experiencias.length})</h2>
           {!expForm && (
-            <button onClick={() => setExpForm({ puesto: '', institucion: '', descripcion: '', fechaDesde: '', fechaHasta: '', actualidad: false })} className="btn-primary">
+            <button onClick={() => setExpForm({ puesto: '', institucion: '', descripcion: '', fechaDesde: '', fechaHasta: '', actualidad: false, archivos: [] })} className="btn-primary">
               <Plus size={16} /> Agregar experiencia
             </button>
           )}
@@ -409,6 +535,36 @@ export default function MiCvPage() {
                 placeholder="Podés usar **negrita**, *cursiva* y listas con '-'"
               />
             </div>
+            <div>
+              <label className="label">Anexos (PDF, JPG o PNG · máx. 5 archivos · hasta 10 MB c/u)</label>
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => {
+                  const nuevos = Array.from(e.target.files ?? []);
+                  setExpForm({ ...expForm, archivos: [...expForm.archivos, ...nuevos].slice(0, 5) });
+                }}
+                className="input file:mr-3 file:rounded-pill file:border-0 file:bg-surface-alt file:px-3 file:py-1 file:text-sm"
+              />
+              {expForm.archivos.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {expForm.archivos.map((f, i) => (
+                    <li key={i} className="flex items-center justify-between gap-2 text-sm text-ink-secondary">
+                      <span className="min-w-0 truncate">{f.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setExpForm({ ...expForm, archivos: expForm.archivos.filter((_, j) => j !== i) })}
+                        className="btn-danger !px-2 !py-0.5 text-xs"
+                      >
+                        Quitar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {expForm.archivos.length >= 5 && <p className="text-xs text-ink-muted">Máximo 5 anexos por experiencia.</p>}
+            </div>
             <div className="flex gap-2">
               <button onClick={guardarExperiencia} className="btn-primary">
                 {expForm.id ? 'Guardar cambios' : 'Agregar experiencia'}
@@ -430,6 +586,26 @@ export default function MiCvPage() {
                     {formatFecha(x.fechaDesde)} – {x.fechaHasta ? formatFecha(x.fechaHasta) : 'Actualidad'}
                   </p>
                   {x.descripcion && <p className="mt-1 whitespace-pre-line text-sm text-ink-secondary">{x.descripcion}</p>}
+                  {x.adjuntos && x.adjuntos.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs font-medium text-ink-muted">Anexos</p>
+                      {x.adjuntos.map((adj) => (
+                        <div key={adj.id} className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="min-w-0 max-w-[14rem] truncate">{adj.nombreArchivo}</span>
+                          <span className="text-xs text-ink-muted">({tamanoLegible(adj.tamanoBytes)})</span>
+                          <button onClick={() => verExperienciaAdjunto(x.id!, adj.adjuntoId, adj.nombreArchivo)} className="btn-secondary !px-2 !py-0.5 text-xs" title="Vista previa">
+                            <Eye size={12} /> Ver
+                          </button>
+                          <button onClick={() => descargarExperienciaAdjunto(x.id!, adj.adjuntoId, adj.nombreArchivo)} className="btn-secondary !px-2 !py-0.5 text-xs" title="Descargar">
+                            <Download size={12} />
+                          </button>
+                          <button onClick={() => eliminarExperienciaAdjunto(x.id!, adj.adjuntoId)} className="btn-danger !px-2 !py-0.5 text-xs" title="Eliminar">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-1">
                   <button
@@ -442,7 +618,8 @@ export default function MiCvPage() {
                         descripcion: x.descripcion ?? '',
                         fechaDesde: x.fechaDesde.slice(0, 10),
                         fechaHasta: x.fechaHasta?.slice(0, 10) ?? '',
-                        actualidad: !x.fechaHasta
+                        actualidad: !x.fechaHasta,
+                        archivos: []
                       });
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
@@ -598,10 +775,52 @@ export default function MiCvPage() {
       </div>
       )}
 
+      {solapa === 'prof-artisticos' && (
+        <CvItemsSection
+          seccion="antecedentes-prof-artisticos"
+          titulo="Antecedentes profesionales y/o artísticos"
+          textoAgregar="Agregar antecedente"
+          categorias={CATEGORIAS_PROF_ART}
+          items={itemsCv}
+          onCambio={cargar}
+          onVer={(blob, nombre) => setViendo({ blob, nombre })}
+          onError={setError}
+          onMensaje={setMensaje}
+        />
+      )}
+
+      {solapa === 'produccion' && (
+        <CvItemsSection
+          seccion="produccion"
+          titulo="Producción"
+          textoAgregar="Agregar producción"
+          categorias={CATEGORIAS_PRODUCCION}
+          items={itemsCv}
+          onCambio={cargar}
+          onVer={(blob, nombre) => setViendo({ blob, nombre })}
+          onError={setError}
+          onMensaje={setMensaje}
+        />
+      )}
+
+      {solapa === 'otros-antecedentes' && (
+        <CvItemsSection
+          seccion="otros-antecedentes"
+          titulo="Otros antecedentes"
+          textoAgregar="Agregar antecedente"
+          categorias={null}
+          items={itemsCv}
+          onCambio={cargar}
+          onVer={(blob, nombre) => setViendo({ blob, nombre })}
+          onError={setError}
+          onMensaje={setMensaje}
+        />
+      )}
+
       {solapa === 'certificados' && (
       <>
       <div className="card">
-        <h2 className="mb-3 font-semibold">Subir certificado</h2>
+        <h2 className="mb-3 font-semibold">{certEditandoId ? 'Editar certificado' : 'Subir certificado'}</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="label">Nombre del curso / carrera</label>
@@ -623,20 +842,31 @@ export default function MiCvPage() {
             <label className="label">Fecha de obtención</label>
             <input type="date" value={fechaObtencion} onChange={(e) => setFechaObtencion(e.target.value)} max={new Date().toISOString().slice(0, 10)} className="input" />
           </div>
-          <div className="sm:col-span-2">
-            <label className="label">Certificado (PDF, JPG o PNG · máx. 10 MB)</label>
-            <input
-              id="cv-archivo"
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
-              className="input file:mr-3 file:rounded-pill file:border-0 file:bg-surface-alt file:px-3 file:py-1 file:text-sm"
-            />
-          </div>
+          {certEditandoId ? (
+            <div className="sm:col-span-2">
+              <p className="text-xs text-ink-muted">El archivo no se puede cambiar al editar; si necesitás reemplazarlo, eliminá el certificado y volvé a subirlo.</p>
+            </div>
+          ) : (
+            <div className="sm:col-span-2">
+              <label className="label">Certificado (PDF, JPG o PNG · máx. 10 MB)</label>
+              <input
+                id="cv-archivo"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
+                className="input file:mr-3 file:rounded-pill file:border-0 file:bg-surface-alt file:px-3 file:py-1 file:text-sm"
+              />
+            </div>
+          )}
         </div>
-        <button onClick={subir} disabled={enviando} className="btn-primary mt-4">
-          <FileUp size={16} /> {enviando ? 'Subiendo...' : 'Subir certificado'}
-        </button>
+        <div className="mt-4 flex gap-2">
+          <button onClick={subir} disabled={enviando} className="btn-primary">
+            <FileUp size={16} /> {enviando ? 'Guardando...' : certEditandoId ? 'Guardar cambios' : 'Subir certificado'}
+          </button>
+          {certEditandoId && (
+            <button onClick={cancelarEdicionCert} className="btn-secondary">Cancelar</button>
+          )}
+        </div>
       </div>
 
       <div className="card">
@@ -664,6 +894,12 @@ export default function MiCvPage() {
                   </button>
                   <button onClick={() => descargar(c.id)} className="btn-secondary">
                     <Download size={16} /> Archivo
+                  </button>
+                  <button onClick={() => editarCertificado(c)} className="btn-secondary" title="Editar">
+                    <Pencil size={16} />
+                  </button>
+                  <button onClick={() => eliminarCertificado(c.id)} className="btn-danger !px-2 !py-1" title="Eliminar">
+                    <Trash2 size={16} />
                   </button>
                 </div>
               </div>

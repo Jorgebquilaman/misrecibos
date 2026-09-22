@@ -13,4 +13,6 @@ public interface ICertificadoCvRepository
     Task<IReadOnlyList<CertificadoCurso>> GetAllAsync(CancellationToken ct = default);
 
     Task UpdateAsync(CertificadoCurso certificado, CancellationToken ct = default);
+
+    Task DeleteAsync(CertificadoCurso certificado, CancellationToken ct = default);
 }

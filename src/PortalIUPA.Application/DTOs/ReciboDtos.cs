@@ -28,4 +28,4 @@ public sealed record DescargaReciboDto(
     DateTime FechaHora,
     OrigenDescarga Origen);
 
-public sealed record ReciboPdfResult(byte[] Pdf, string NombreArchivo);
+public sealed record ReciboPdfResult(byte[] Pdf, string NombreArchivo, int Legajo = 0);

@@ -30,7 +30,7 @@ public sealed class SqlServerRelojDataSource : IRelojDataSource
 {
     /// <summary>Circuit breaker: si el MSSQL no responde, se evita reintentar por este tiempo (la lectura
     /// cae al fallback de marcas sincronizadas en PostgreSQL).</summary>
-    private static readonly TimeSpan VentanaReintento = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan VentanaReintento = TimeSpan.FromMinutes(2);
     private static DateTime _caidoHasta = DateTime.MinValue;
     private static readonly object Lock = new();
 
@@ -41,6 +41,18 @@ public sealed class SqlServerRelojDataSource : IRelojDataSource
     {
         _options = options.Value;
         _logger = logger;
+    }
+
+    /// <summary>Connection string con Connect Timeout acotado: el túnel SSH del reloj es inestable y
+    /// el default (15 s) por cada intento congelaba los requests hasta un minuto.</summary>
+    private string ConnectionString
+    {
+        get
+        {
+            var cs = _options.SqlServerConnectionString;
+            if (cs.Contains("Connect Timeout", StringComparison.OrdinalIgnoreCase)) return cs;
+            return cs.TrimEnd(';') + ";Connect Timeout=5";
+        }
     }
 
     public async Task<IReadOnlyList<MarcaRelojCruda>> ObtenerMarcasAsync(int? legajo, DateTime desde, DateTime hasta,
@@ -56,7 +68,9 @@ public sealed class SqlServerRelojDataSource : IRelojDataSource
             throw new RelojNoDisponibleException("Reloj no configurado (sin SqlServerConnectionString).");
 
         Exception? ultimoError = null;
-        for (var intento = 1; intento <= 2; intento++)
+        // Un solo intento: con el túnel saturado cada reintento suma 15+ s de espera al usuario;
+        // si falla abre el circuito y las lecturas caen rápido al fallback de PostgreSQL.
+        for (var intento = 1; intento <= 1; intento++)
         {
             try
             {
@@ -69,22 +83,21 @@ public sealed class SqlServerRelojDataSource : IRelojDataSource
             catch (Exception ex)
             {
                 ultimoError = ex;
-                _logger.LogWarning(ex, "Reloj: intento {Intento}/2 falló al leer marcas del checador (legajo {Legajo}).", intento, legajo);
+                _logger.LogWarning(ex, "Reloj: intento {Intento}/1 falló al leer marcas del checador (legajo {Legajo}).", intento, legajo);
                 SqlConnection.ClearAllPools();
-                if (intento < 2) await Task.Delay(TimeSpan.FromSeconds(1), ct);
             }
         }
 
         lock (Lock) { _caidoHasta = DateTime.UtcNow + VentanaReintento; }
-        _logger.LogError(ultimoError, "Reloj: no se pudieron leer las marcas tras 2 intentos.");
+        _logger.LogError(ultimoError, "Reloj: no se pudieron leer las marcas tras 1 intento.");
         throw new RelojNoDisponibleException(
-            "No se pudo consultar el reloj (MSSQL). Verifique la conexión o intente nuevamente en unos minutos.", VentanaReintento);
+            "No se pudo consultar el reloj (MSSQL). Se usan las marcas locales; reintentará en unos minutos.", VentanaReintento);
     }
 
     private async Task<IReadOnlyList<MarcaRelojCruda>> LeerMarcasAsync(int? legajo, DateTime desde, DateTime hasta, CancellationToken ct)
     {
         var marcas = new List<MarcaRelojCruda>();
-        await using var conexion = new SqlConnection(_options.SqlServerConnectionString);
+        await using var conexion = new SqlConnection(ConnectionString);
         await conexion.OpenAsync(ct);
 
         const string sql = """
@@ -96,7 +109,7 @@ public sealed class SqlServerRelojDataSource : IRelojDataSource
             ORDER BY ci.CHECKTIME
             """;
         await using var comando = new SqlCommand(sql, conexion);
-        comando.CommandTimeout = 30;
+        comando.CommandTimeout = 10;
         comando.Parameters.Add("@Desde", SqlDbType.DateTime2).Value = desde;
         comando.Parameters.Add("@Hasta", SqlDbType.DateTime2).Value = hasta;
         comando.Parameters.Add("@Legajo", SqlDbType.Int).Value = legajo.HasValue ? (object)legajo.Value : DBNull.Value;
@@ -124,10 +137,10 @@ public sealed class SqlServerRelojDataSource : IRelojDataSource
             return false;
         }
 
-        // Reintentos con conexión limpia: los timeouts de handshake pre-login contra el MSSQL del reloj
-        // suelen ser transitorios (túnel saturado); reutilizar el pool puede reintentar sobre una conexión muerta.
+        // Reintento único con conexión limpia: el alta ya quedó en PostgreSQL; si el túnel está
+        // saturado no vale la pena congelar al usuario con más intentos (queda pendiente de sync).
         Exception? ultimoError = null;
-        for (var intento = 1; intento <= 2; intento++)
+        for (var intento = 1; intento <= 1; intento++)
         {
             try
             {
@@ -136,20 +149,19 @@ public sealed class SqlServerRelojDataSource : IRelojDataSource
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 ultimoError = ex;
-                _logger.LogWarning(ex, "Reloj: intento {Intento}/2 falló al registrar marca manual en MSSQL para legajo {Legajo}.",
+                _logger.LogWarning(ex, "Reloj: intento {Intento}/1 falló al registrar marca manual en MSSQL para legajo {Legajo}.",
                     intento, legajo);
                 SqlConnection.ClearAllPools();
-                if (intento < 2) await Task.Delay(TimeSpan.FromSeconds(2), ct);
             }
         }
 
-        _logger.LogError(ultimoError, "Reloj: no se pudo registrar la marca manual en MSSQL para legajo {Legajo} tras 2 intentos.", legajo);
+        _logger.LogError(ultimoError, "Reloj: no se pudo registrar la marca manual en MSSQL para legajo {Legajo}.", legajo);
         return false;
     }
 
     private async Task<bool> InsertarMarcaAsync(int legajo, DateTime fechaHora, TipoMarca tipo, CancellationToken ct)
     {
-        await using var conexion = new SqlConnection(_options.SqlServerConnectionString);
+        await using var conexion = new SqlConnection(ConnectionString);
         await conexion.OpenAsync(ct);
 
         // Resolver USERID a partir del legajo (BADGENUMBER)
@@ -181,6 +193,69 @@ public sealed class SqlServerRelojDataSource : IRelojDataSource
         var filas = await cmdInsert.ExecuteNonQueryAsync(ct);
         _logger.LogInformation("Reloj: marca manual registrada en MSSQL para legajo {Legajo} USERID {UserId} fecha {Fecha} tipo {Tipo}.", legajo, userId, fechaHora, tipo);
         return filas > 0;
+    }
+
+    /// <summary>Inserta en checkinout las marcas de la descarga que no existan (por USERID + CHECKTIME + CHECKTYPE).</summary>
+    public async Task<int> SincronizarMarcasMssqlAsync(IReadOnlyList<(int Legajo, DateTime FechaHora, TipoMarca Tipo)> marcas,
+        CancellationToken ct = default)
+    {
+        if (marcas.Count == 0) return 0;
+        if (string.IsNullOrWhiteSpace(_options.SqlServerConnectionString))
+        {
+            _logger.LogWarning("Reloj: no hay SqlServerConnectionString configurada. No se sincronizaron {Cantidad} marcas al MSSQL.", marcas.Count);
+            return 0;
+        }
+
+        await using var conexion = new SqlConnection(ConnectionString);
+        await conexion.OpenAsync(ct);
+
+        // Resolver USERID por legajo una sola vez.
+        var legajos = marcas.Select(m => m.Legajo).Distinct().ToList();
+        var legajoAUserId = new Dictionary<int, int>();
+        await using (var cmdUser = new SqlCommand(
+            "SELECT BADGENUMBER, USERID FROM userinfo WHERE BADGENUMBER IN (" +
+            string.Join(", ", legajos.Select((_, i) => $"@l{i}")) + ")", conexion))
+        {
+            for (var i = 0; i < legajos.Count; i++)
+                cmdUser.Parameters.AddWithValue($"@l{i}", legajos[i].ToString());
+            await using var lector = await cmdUser.ExecuteReaderAsync(ct);
+            while (await lector.ReadAsync(ct))
+                if (TryParseLegajo(lector["BADGENUMBER"], out var legajo))
+                    legajoAUserId[legajo] = Convert.ToInt32(lector["USERID"]);
+        }
+
+        var insertadas = 0;
+        foreach (var (legajo, fechaHora, tipo) in marcas)
+        {
+            if (!legajoAUserId.TryGetValue(legajo, out var userId)) continue;
+            var checkType = tipo == TipoMarca.Entrada ? "I" : "O";
+
+            // Existe ya en el MSSQL → no insertar
+            await using (var cmdExiste = new SqlCommand(
+                "SELECT COUNT(1) FROM checkinout WHERE USERID = @u AND CHECKTIME = @f AND CHECKTYPE = @t", conexion))
+            {
+                cmdExiste.Parameters.AddWithValue("@u", userId);
+                cmdExiste.Parameters.Add("@f", SqlDbType.DateTime).Value = fechaHora;
+                cmdExiste.Parameters.AddWithValue("@t", checkType);
+                if (Convert.ToInt32(await cmdExiste.ExecuteScalarAsync(ct)) > 0) continue;
+            }
+
+            const string sqlInsert = """
+                INSERT INTO checkinout (USERID, CHECKTIME, CHECKTYPE, VERIFYCODE, SENSORID, Memoinfo, WorkCode, sn, UserExtFmt)
+                VALUES (@u, @f, @t, 1, 'WEB', 'Descarga portal', 0, @sn, 1)
+                """;
+            await using var cmdInsert = new SqlCommand(sqlInsert, conexion);
+            cmdInsert.Parameters.AddWithValue("@u", userId);
+            cmdInsert.Parameters.Add("@f", SqlDbType.DateTime).Value = fechaHora;
+            cmdInsert.Parameters.AddWithValue("@t", checkType);
+            cmdInsert.Parameters.AddWithValue("@sn", "PORTAL-IUPA");
+            if (await cmdInsert.ExecuteNonQueryAsync(ct) > 0) insertadas++;
+        }
+
+        _logger.LogInformation(
+            "Reloj: sincronización MSSQL post-descarga: {Insertadas}/{Total} marcas insertadas en checkinout.",
+            insertadas, marcas.Count);
+        return insertadas;
     }
 
     public async Task<bool> EditarMarcaAsync(int legajo, DateTime fechaHoraVieja, TipoMarca tipoViejo,
@@ -258,7 +333,7 @@ public sealed class SqlServerRelojDataSource : IRelojDataSource
 
         try
         {
-            var conexion = new SqlConnection(_options.SqlServerConnectionString);
+            var conexion = new SqlConnection(ConnectionString);
             await conexion.OpenAsync(ct);
 
             await using var cmdUser = new SqlCommand("SELECT USERID FROM userinfo WHERE BADGENUMBER = @Legajo", conexion);
@@ -353,5 +428,12 @@ public sealed class MockRelojDataSource : IRelojDataSource
     public Task<bool> EliminarMarcaAsync(int legajo, DateTime fechaHora, TipoMarca tipo, CancellationToken ct = default)
     {
         return Task.FromResult(true);
+    }
+
+    public Task<int> SincronizarMarcasMssqlAsync(IReadOnlyList<(int Legajo, DateTime FechaHora, TipoMarca Tipo)> marcas,
+        CancellationToken ct = default)
+    {
+        // Mock: no hay MSSQL real
+        return Task.FromResult(0);
     }
 }

@@ -24,4 +24,8 @@ public interface IRelojDataSource
 
     /// <summary>Elimina una marca manual en la base del reloj (localiza por valores). Retorna false si no se pudo eliminar.</summary>
     Task<bool> EliminarMarcaAsync(int legajo, DateTime fechaHora, TipoMarca tipo, CancellationToken ct = default);
+
+    /// <summary>Inserta en la base del reloj (MSSQL) las marcas que no existan en checkinout. Devuelve la cantidad insertadas.</summary>
+    Task<int> SincronizarMarcasMssqlAsync(IReadOnlyList<(int Legajo, DateTime FechaHora, TipoMarca Tipo)> marcas,
+        CancellationToken ct = default);
 }

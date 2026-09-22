@@ -34,6 +34,16 @@ public sealed class FichadasController : ApiControllerBase
         return File(archivo.Bytes, archivo.ContentType, archivo.NombreArchivo);
     }
 
+    /// <summary>Exporta el listado crudo de todas las marcas propias del mes (reloj + manuales + descargadas).</summary>
+    [HttpGet("mias/marcas/exportar")]
+    public async Task<IActionResult> ExportarMarcasMes([FromQuery] int anio, [FromQuery] int mes,
+        [FromQuery] string formato = "xlsx")
+    {
+        var reporte = await _mediator.Send(new ExportarMarcasMesQuery(EmpleadoId, anio, mes));
+        var archivo = await _exportador.GenerarAsync(reporte, formato);
+        return File(archivo.Bytes, archivo.ContentType, archivo.NombreArchivo);
+    }
+
     [Authorize(Policy = "Responsable")]
     [HttpGet("asistencia")]
     public async Task<IActionResult> Asistencia([FromQuery] Guid? areaId, [FromQuery] DateOnly desde,
@@ -44,7 +54,7 @@ public sealed class FichadasController : ApiControllerBase
     [HttpPost("marcas-manuales")]
     public async Task<IActionResult> CrearMarcaManual([FromBody] CrearMarcaManualRequest request) =>
         Ok(await _mediator.Send(new CrearMarcaManualCommand(EmpleadoId, User.GetRoles(), request.EmpleadoId,
-            request.FechaHora, request.Tipo)));
+            request.FechaHora, request.Tipo, request.Latitud, request.Longitud)));
 
     /// <summary>Edita una marca manual propia o de un empleado si es staff. Replica el cambio en el reloj (MSSQL).</summary>
     [HttpPut("marcas-manuales/{id:guid}")]
@@ -77,6 +87,7 @@ public sealed class FichadasController : ApiControllerBase
         Ok(await _mediator.Send(new GetHomeOfficeEmpleadosQuery()));
 }
 
-public sealed record CrearMarcaManualRequest(Guid? EmpleadoId, DateTime FechaHora, string Tipo);
+public sealed record CrearMarcaManualRequest(Guid? EmpleadoId, DateTime FechaHora, string Tipo,
+    double? Latitud = null, double? Longitud = null);
 
 public sealed record EditarMarcaManualRequest(DateTime FechaHora, string Tipo);

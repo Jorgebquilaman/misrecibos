@@ -29,6 +29,19 @@ builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
+// Los errores de validación de binding (ApiController) devuelven {error} para que el frontend lo muestre.
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(o =>
+{
+    o.InvalidModelStateResponseFactory = contexto =>
+    {
+        var detalles = contexto.ModelState.Values
+            .SelectMany(v => v.Errors)
+            .Where(e => !string.IsNullOrEmpty(e.ErrorMessage))
+            .Select(e => e.ErrorMessage);
+        return new Microsoft.AspNetCore.Mvc.BadRequestObjectResult(
+            new { error = $"Datos inválidos: {string.Join("; ", detalles)}" });
+    };
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(o =>

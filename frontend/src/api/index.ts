@@ -8,6 +8,10 @@ import type {
   CertificadoCvDto,
   CertificadoCvAdminDto,
   ExperienciaCvDto,
+  ExperienciaAdjuntoDto,
+  CvItemDto,
+  CvItemAdjuntoDto,
+  EdificioDto,
   AntecedenteAcademicoDto,
   ConsumoTipoLicenciaDto,
   DashboardEmpleadoDto,
@@ -23,10 +27,28 @@ EmpleadoDto,
   PeriodoDto,
   ReciboDisponibleDto,
   RelacionACargoDto,
+  RelojZkDto,
+  RelojZkInfoDto,
+  RelojZkDescargaDto,
+  ResultadoDescargaRelojZkDto,
+  ColumnaMetadata,
+  PermisoDto,
+  ReporteCompletoDto,
+  ReporteDefinicionDto,
+  ReporteDiseno,
+  ReporteResumenDto,
+  ResultadoReporteDto,
+  TablaDetalleDto,
+  TablaListaDto,
+  DashboardCompletoDto,
+  DashboardDefinicionDto,
+  DashboardResumenDto,
+  ResultadoDashboardDto,
   SincronizarPeriodosResultDto,
   SolicitudDetalleDto,
   SolicitudLicenciaDto,
-  TipoLicenciaDto
+  TipoLicenciaDto,
+  TrazabilidadRegistroDto
 } from '../types';
 
 export const authApi = {
@@ -66,11 +88,13 @@ export const fichadasApi = {
     api.get<MisFichadasDto>('/fichadas/mias', { params: { anio, mes } }).then((r) => r.data),
   exportar: (anio: number, mes: number, formato: 'pdf' | 'xlsx') =>
     api.get<Blob>('/fichadas/mias/exportar', { params: { anio, mes, formato }, responseType: 'blob' }).then((r) => r.data),
+  exportarMarcas: (anio: number, mes: number, formato: 'pdf' | 'xlsx') =>
+    api.get<Blob>('/fichadas/mias/marcas/exportar', { params: { anio, mes, formato }, responseType: 'blob' }).then((r) => r.data),
   asistencia: (desde: string, hasta: string, areaId?: string) =>
     api.get<AsistenciaAreaDto>('/fichadas/asistencia', { params: { desde, hasta, areaId } }).then((r) => r.data),
   marcasManuales: (params?: { desde?: string; hasta?: string; empleadoId?: string }) =>
     api.get<MarcaManualDto[]>('/fichadas/marcas-manuales', { params }).then((r) => r.data),
-  crearMarcaManual: (data: { empleadoId?: string | null; fechaHora: string; tipo: 'entrada' | 'salida' }) =>
+  crearMarcaManual: (data: { empleadoId?: string | null; fechaHora: string; tipo: 'entrada' | 'salida'; latitud: number; longitud: number }) =>
     api.post('/fichadas/marcas-manuales', data).then((r) => r.data),
   editarMarcaManual: (id: string, data: { fechaHora: string; tipo: 'entrada' | 'salida' }) =>
     api.put(`/fichadas/marcas-manuales/${id}`, data).then((r) => r.data),
@@ -124,6 +148,35 @@ export const cvApi = {
   editarExperiencia: (id: string, data: Omit<ExperienciaCvDto, 'id'>) =>
     api.put(`/cv-certificados/experiencias/${id}`, data),
   eliminarExperiencia: (id: string) => api.delete(`/cv-certificados/experiencias/${id}`),
+  items: () => api.get<CvItemDto[]>('/cv-certificados/items').then((r) => r.data),
+  crearItem: (data: { seccion: string; categoria: string; titulo: string; institucion?: string | null; descripcion?: string | null; fechaDesde: string; fechaHasta?: string | null }) =>
+    api.post<CvItemDto>('/cv-certificados/items', data).then((r) => r.data as CvItemDto),
+  editarItem: (id: string, data: { seccion: string; categoria: string; titulo: string; institucion?: string | null; descripcion?: string | null; fechaDesde: string; fechaHasta?: string | null }) =>
+    api.put(`/cv-certificados/items/${id}`, data),
+  duplicarItem: (id: string) => api.post<CvItemDto>(`/cv-certificados/items/${id}/duplicar`).then((r) => r.data as CvItemDto),
+  eliminarItem: (id: string) => api.delete(`/cv-certificados/items/${id}`),
+  subirItemAdjunto: (itemId: string, archivo: File) => {
+    const form = new FormData();
+    form.append('archivo', archivo);
+    return api.post(`/cv-certificados/items/${itemId}/adjuntos`, form).then((r) => r.data as CvItemAdjuntoDto);
+  },
+  eliminarItemAdjunto: (itemId: string, adjuntoId: string) =>
+    api.delete(`/cv-certificados/items/${itemId}/adjuntos/${adjuntoId}`),
+  descargarItemAdjunto: async (itemId: string, adjuntoId: string) => {
+    const r = await api.get(`/cv-certificados/items/${itemId}/adjuntos/${adjuntoId}/archivo`, { responseType: 'blob' });
+    return { blob: r.data as Blob, disposition: r.headers['content-disposition'] as string | undefined };
+  },
+  subirExperienciaAdjunto: (experienciaId: string, archivo: File) => {
+    const form = new FormData();
+    form.append('archivo', archivo);
+    return api.post(`/cv-certificados/experiencias/${experienciaId}/adjuntos`, form).then((r) => r.data as ExperienciaAdjuntoDto);
+  },
+  eliminarExperienciaAdjunto: (experienciaId: string, adjuntoId: string) =>
+    api.delete(`/cv-certificados/experiencias/${experienciaId}/adjuntos/${adjuntoId}`),
+  descargarExperienciaAdjunto: async (experienciaId: string, adjuntoId: string) => {
+    const r = await api.get(`/cv-certificados/experiencias/${experienciaId}/adjuntos/${adjuntoId}/archivo`, { responseType: 'blob' });
+    return { blob: r.data as Blob, disposition: r.headers['content-disposition'] as string | undefined };
+  },
   antecedentes: () =>
     api.get<AntecedenteAcademicoDto[]>('/cv-certificados/antecedentes').then((r) => r.data),
   crearAntecedente: (data: { titulo: string; institucion: string; nivel: string; descripcion?: string | null; fechaDesde: string; fechaHasta?: string | null; archivo: File }) => {
@@ -153,6 +206,14 @@ export const cvApi = {
     form.append('archivo', data.archivo);
     return api.post('/cv-certificados', form).then((r) => r.data as CertificadoCvDto);
   },
+  editar: (id: string, data: { nombre: string; institucion: string; tipo: string; fechaObtencion: string }) =>
+    api.put(`/cv-certificados/${id}`, {
+      nombre: data.nombre,
+      institucion: data.institucion,
+      tipo: data.tipo,
+      fechaObtencion: data.fechaObtencion
+    }).then((r) => r.data as CertificadoCvDto),
+  eliminar: (id: string) => api.delete(`/cv-certificados/${id}`),
   descargarArchivo: async (id: string) => {
     const r = await api.get(`/cv-certificados/${id}/archivo`, { responseType: 'blob' });
     return { blob: r.data as Blob, disposition: r.headers['content-disposition'] as string | undefined };
@@ -171,6 +232,31 @@ export const adjuntosApi = {
     const r = await api.post('/adjuntos', form);
     return r.data as { id: string; nombreArchivo: string };
   }
+};
+
+export const edificiosApi = {
+  todos: () => api.get<EdificioDto[]>('/edificios').then((r) => r.data),
+  crear: (data: { nombre: string; latitud: number; longitud: number; radioMetros: number; activo?: boolean }) =>
+    api.post<EdificioDto>('/edificios', { activo: true, ...data }).then((r) => r.data),
+  editar: (id: string, data: { nombre: string; latitud: number; longitud: number; radioMetros: number; activo: boolean }) =>
+    api.put(`/edificios/${id}`, data),
+  eliminar: (id: string) => api.delete(`/edificios/${id}`)
+};
+
+export const relojesZkApi = {
+  todos: () => api.get<RelojZkDto[]>('/relojes-zk').then((r) => r.data),
+  crear: (data: { nombre: string; ip: string; puerto: number; commKey: number; modo?: 'directo' | 'mssql'; activo?: boolean }) =>
+    api.post<RelojZkDto>('/relojes-zk', { activo: true, ...data }).then((r) => r.data),
+  editar: (id: string, data: { nombre: string; ip: string; puerto: number; commKey: number; modo: 'directo' | 'mssql'; activo: boolean }) =>
+    api.put(`/relojes-zk/${id}`, data),
+  eliminar: (id: string) => api.delete(`/relojes-zk/${id}`),
+  probar: (id: string) => api.post<RelojZkInfoDto>(`/relojes-zk/${id}/probar`).then((r) => r.data),
+  descargar: (id: string, desde?: string, hasta?: string) =>
+    api.post<ResultadoDescargaRelojZkDto>(
+      `/relojes-zk/${id}/descargar`, (desde || hasta) ? { desde, hasta } : {}
+    ).then((r) => r.data),
+  vaciar: (id: string) => api.post(`/relojes-zk/${id}/vaciar`),
+  descargas: () => api.get<RelojZkDescargaDto[]>('/relojes-zk/descargas').then((r) => r.data)
 };
 
 export const adminApi = {
@@ -229,4 +315,63 @@ export const adminApi = {
 export const dashboardApi = {
   empleado: () => api.get<DashboardEmpleadoDto>('/dashboard/empleado').then((r) => r.data),
   empleador: () => api.get<DashboardEmpleadorDto>('/dashboard/empleador').then((r) => r.data)
+};
+
+export const trazabilidadApi = {
+  consultarTraceId: (traceId: string) =>
+    api.post<TrazabilidadRegistroDto>('/admin/trazabilidad/consultar-traceid', { traceId }).then((r) => r.data),
+  decodificarMorse: (morse: string) =>
+    api.post<TrazabilidadRegistroDto>('/admin/trazabilidad/decodificar-morse', { morse }).then((r) => r.data),
+  decodificar: async (archivo: File) => {
+    const form = new FormData();
+    form.append('archivo', archivo);
+    const r = await api.post<TrazabilidadRegistroDto>('/admin/trazabilidad/decodificar', form);
+    return r.data;
+  },
+  historial: () =>
+    api.get<TrazabilidadRegistroDto[]>('/admin/trazabilidad/historial').then((r) => r.data)
+};
+export const reportesApi = {
+  todos: () => api.get<ReporteResumenDto[]>('/reportes-builder').then((r) => r.data),
+  porId: (id: string) => api.get<ReporteCompletoDto>(`/reportes-builder/${id}`).then((r) => r.data),
+  conexiones: () => api.get<{ conexiones: string[] }>('/reportes-builder/conexiones').then((r) => r.data.conexiones),
+  tablas: (conexion: string) =>
+    api.get<TablaListaDto[]>(`/reportes-builder/conexiones/${encodeURIComponent(conexion)}/tablas`).then((r) => r.data),
+  tablaDetalle: (conexion: string, esquema: string, tabla: string) =>
+    api.get<TablaDetalleDto>(`/reportes-builder/conexiones/${encodeURIComponent(conexion)}/tablas/${encodeURIComponent(esquema)}/${encodeURIComponent(tabla)}`).then((r) => r.data),
+  metadataSql: (querySql: string, conexion: string | null) =>
+    api.post<{ columnas: ColumnaMetadata[] }>('/reportes-builder/preview-metadata', { querySql, conexion }).then((r) => r.data.columnas),
+  previewSql: (querySql: string, conexion: string | null) =>
+    api.post<ResultadoReporteDto>('/reportes-builder/preview-sql', { querySql, conexion }).then((r) => r.data),
+  metadata: (id: string) =>
+    api.get<{ columnas: ColumnaMetadata[] }>(`/reportes-builder/${id}/metadata`).then((r) => r.data.columnas),
+  crear: (nombre: string, descripcion: string | null, querySql: string, conexion: string | null, definicion: ReporteDefinicionDto) =>
+    api.post<{ id: string }>('/reportes-builder', { nombre, descripcion, querySql, conexion, definicion }).then((r) => r.data),
+  actualizar: (id: string, nombre: string, descripcion: string | null, querySql: string, conexion: string | null, definicion: ReporteDefinicionDto) =>
+    api.put<{ id: string }>(`/reportes-builder/${id}`, { nombre, descripcion, querySql, conexion, definicion }).then((r) => r.data),
+  eliminar: (id: string) => api.delete(`/reportes-builder/${id}`),
+  ejecutar: (id: string, valores: Record<string, unknown>) =>
+    api.post<ResultadoReporteDto>(`/reportes-builder/${id}/execute`, { valores }).then((r) => r.data),
+  detalle: (id: string, valoresFila: Record<string, unknown>) =>
+    api.post<ResultadoReporteDto>(`/reportes-builder/${id}/detalle`, { valores: valoresFila }).then((r) => r.data),
+  ejecutarSubreporte: (id: string, indice: number, valoresFila: Record<string, unknown>, valores: Record<string, unknown>) =>
+    api.post<ResultadoReporteDto>(`/reportes-builder/${id}/subreportes/${indice}/execute`, { valoresFila, valores }).then((r) => r.data),
+  permisos: (id: string, permisos: PermisoDto[]) =>
+    api.put(`/reportes-builder/${id}/permisos`, { permisos }),
+  guardarDiseno: (id: string, diseno: ReporteDiseno) =>
+    api.put(`/reportes-builder/${id}/diseno`, { diseno: JSON.stringify(diseno) })
+};
+
+export const dashboardsApi = {
+  todos: () => api.get<DashboardResumenDto[]>('/dashboards').then((r) => r.data),
+  porId: (id: string) => api.get<DashboardCompletoDto>(`/dashboards/${id}`).then((r) => r.data),
+  ejecutar: (id: string, valores: Record<string, unknown>) =>
+    api.post<ResultadoDashboardDto>(`/dashboards/${id}/execute`, { valores }).then((r) => r.data),
+  crear: (nombre: string, descripcion: string | null, querySql: string, conexion: string | null, definicion: DashboardDefinicionDto) =>
+    api.post<{ id: string }>('/dashboards', { nombre, descripcion, querySql, conexion, definicion }).then((r) => r.data),
+  actualizar: (id: string, nombre: string, descripcion: string | null, querySql: string, conexion: string | null, definicion: DashboardDefinicionDto) =>
+    api.put<{ id: string }>(`/dashboards/${id}`, { nombre, descripcion, querySql, conexion, definicion }).then((r) => r.data),
+  eliminar: (id: string) => api.delete(`/dashboards/${id}`),
+  vistaPrevia: (querySql: string, conexion: string | null, definicion: DashboardDefinicionDto, valores: Record<string, unknown>) =>
+    api.post<ResultadoDashboardDto>('/dashboards/preview', { querySql, conexion, definicion, valores }).then((r) => r.data)
 };

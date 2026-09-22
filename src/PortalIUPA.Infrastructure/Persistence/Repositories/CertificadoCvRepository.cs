@@ -31,4 +31,10 @@ public sealed class CertificadoCvRepository : ICertificadoCvRepository
         _db.CertificadosCv.Update(certificado);
         await _db.SaveChangesAsync(ct);
     }
+
+    public async Task DeleteAsync(CertificadoCurso certificado, CancellationToken ct = default)
+    {
+        _db.CertificadosCv.Remove(certificado);
+        await _db.SaveChangesAsync(ct);
+    }
 }

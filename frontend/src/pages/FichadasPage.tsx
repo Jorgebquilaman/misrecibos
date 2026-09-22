@@ -45,6 +45,19 @@ export default function FichadasPage() {
     }
   };
 
+  const exportarMarcas = async (formato: 'xlsx' | 'pdf') => {
+    setExportando(true);
+    setError(null);
+    try {
+      const blob = await fichadasApi.exportarMarcas(anio, mes, formato);
+      descargarBlob(blob, `Marcas_${anio}_${String(mes).padStart(2, '0')}.${formato}`);
+    } catch (e: any) {
+      setError(e.response?.data?.error ?? 'No se pudo exportar las marcas.');
+    } finally {
+      setExportando(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -71,6 +84,14 @@ export default function FichadasPage() {
           </button>
           <button onClick={() => exportar('xlsx')} disabled={exportando} className="btn-secondary">
             <Download size={16} /> Excel
+          </button>
+          <button
+            onClick={() => exportarMarcas('xlsx')}
+            disabled={exportando}
+            className="btn-secondary"
+            title="Descarga el detalle de todas las marcas guardadas en la base para el mes elegido (reloj, manuales y descargadas)"
+          >
+            <Download size={16} /> Marcas del mes
           </button>
         </div>
       </div>

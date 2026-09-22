@@ -12,6 +12,11 @@ public sealed record DatoCvExperiencia(
 public sealed record DatoCvAntecedente(
     string Titulo, string Institucion, string Nivel, string? Descripcion, DateOnly FechaDesde, DateOnly? FechaHasta);
 
+/// <summary>Ítem de antecedente profesional/artístico, producción u otro antecedente para el CV.</summary>
+public sealed record DatoCvItem(
+    string Seccion, string Categoria, string Titulo, string? Institucion, string? Descripcion,
+    DateOnly FechaDesde, DateOnly? FechaHasta);
+
 /// <summary>Encabezado con los datos personales que muestra el CV.</summary>
 public sealed record DatosCvEmpleado(
     string ApellidoYNombre, int Legajo, string Correo, string? Documento, string? Area,
@@ -21,10 +26,13 @@ public sealed record DatosCvPdf(
     DatosCvEmpleado Empleado,
     IReadOnlyList<DatoCvCertificado> Certificados,
     IReadOnlyList<DatoCvExperiencia> Experiencias,
-    IReadOnlyList<DatoCvAntecedente> Antecedentes);
+    IReadOnlyList<DatoCvAntecedente> Antecedentes,
+    IReadOnlyList<DatoCvItem> CvItems);
 
-/// <summary>Archivo de un certificado (PDF o imagen) que se adjunta al final del CV.</summary>
-public sealed record ArchivoCertificadoCv(string Nombre, string ContentType, byte[] Contenido);
+/// <summary>Archivo anexo del CV (PDF o imagen) que se adjunta al final. Los campos opcionales
+/// alimentan la fila del índice de adjuntos (institución, tipo/categoría y fecha de referencia).</summary>
+public sealed record ArchivoCertificadoCv(string Nombre, string ContentType, byte[] Contenido,
+    string? Institucion = null, string? Tipo = null, string? Fecha = null);
 
 public interface IGeneradorPdfCv
 {

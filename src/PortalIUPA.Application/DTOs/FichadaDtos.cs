@@ -30,7 +30,8 @@ public sealed record AsistenciaAreaDto(
     IReadOnlyList<AsistenciaPorEmpleadoDto> Empleados);
 
 /// <summary>Marca de entrada/salida cargada manualmente (origen "manual").</summary>
-public sealed record MarcaManualDto(Guid Id, Guid EmpleadoId, DateTime FechaHora, string Tipo, string Origen);
+public sealed record MarcaManualDto(Guid Id, Guid EmpleadoId, DateTime FechaHora, string Tipo, string Origen,
+    double? Latitud = null, double? Longitud = null, string? Edificio = null);
 
 /// <summary>Empleado autorizado a cargar marcas manuales (rol HomeOffice, activo).</summary>
 public sealed record HomeOfficeEmpleadoDto(Guid Id, string Nombre, string Apellido, int Legajo);

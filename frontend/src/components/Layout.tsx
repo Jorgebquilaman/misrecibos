@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
+  BarChart3,
   Bell,
+  Gauge,
   Building2,
   CalendarClock,
   CalendarDays,
   Clock,
   FileText,
+  Fingerprint,
   GraduationCap,
   Home,
   LogOut,
@@ -15,12 +18,13 @@ import {
   Newspaper,
   PenLine,
   Receipt,
+  ScanLine,
   Sun,
   TableProperties,
   Users,
   X
 } from 'lucide-react';
-import { useAuthStore, esResponsable, esRrhh, puedeCargarMarcasManuales } from '../store/authStore';
+import { useAuthStore, esResponsable, esRrhh, esAdmin, puedeCargarMarcasManuales } from '../store/authStore';
 import { notificacionesApi } from '../api';
 import { formatFecha } from '../utils';
 
@@ -90,6 +94,16 @@ export default function Layout() {
           <NavLink to="/fichadas" className={linkClase}>
             <Clock size={18} /> Fichadas
           </NavLink>
+          {(esRrhh(usuario?.roles) || esAdmin(usuario?.roles)) && (
+            <>
+              <NavLink to="/reportes" className={linkClase}>
+                <BarChart3 size={18} /> Reportes
+              </NavLink>
+              <NavLink to="/dashboards" className={linkClase}>
+                <Gauge size={18} /> Dashboards
+              </NavLink>
+            </>
+          )}
           {puedeCargarMarcasManuales(usuario?.roles) && (
             <NavLink to="/marcas-manuales" className={linkClase}>
               <PenLine size={18} /> Marcas manuales
@@ -147,6 +161,27 @@ export default function Layout() {
               </NavLink>
               <NavLink to="/admin/anuncios" className={linkClase}>
                 <Newspaper size={18} /> Anuncios
+              </NavLink>
+            </>
+          )}
+
+          {esAdmin(usuario?.roles) && (
+            <>
+              <p className="mt-4 px-3 text-[11px] font-medium uppercase tracking-[0.12em] text-ink-muted">Sistema</p>
+              <NavLink to="/admin/edificios" className={linkClase}>
+                <Building2 size={18} /> Edificios
+              </NavLink>
+              <NavLink to="/admin/relojes" className={linkClase}>
+                <Fingerprint size={18} /> Relojes ZKTeco
+              </NavLink>
+              <NavLink to="/admin/reportes" className={linkClase}>
+                <BarChart3 size={18} /> Reportes
+              </NavLink>
+              <NavLink to="/admin/dashboards" className={linkClase}>
+                <Gauge size={18} /> Dashboards
+              </NavLink>
+              <NavLink to="/admin/trazabilidad" className={linkClase}>
+                <ScanLine size={18} /> Trazabilidad de PDFs
               </NavLink>
             </>
           )}

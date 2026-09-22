@@ -44,7 +44,9 @@ public sealed class GlobalExceptionMiddleware
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error no controlado en {Ruta}", context.Request.Path);
-            await ResponderAsync(context, HttpStatusCode.InternalServerError, "Ocurrió un error inesperado.");
+            // Incluimos el mensaje de la excepción para que el usuario pueda reportar el error real.
+            await ResponderAsync(context, HttpStatusCode.InternalServerError,
+                $"Ocurrió un error inesperado: {ex.Message}");
         }
     }
 

@@ -85,6 +85,61 @@ public sealed class SubirCertificadoCvCommandHandler : IRequestHandler<SubirCert
             c.Estado.ToString(), c.ComentarioRevision, a.Id, a.NombreArchivo, a.TamañoBytes, c.FechaCarga);
 }
 
+/// <summary>Edita los datos de un certificado propio (sin reemplazar el archivo); vuelve a Pendiente para revisión de RRHH.</summary>
+public sealed record EditarCertificadoCvCommand(
+    Guid EmpleadoId, Guid CertificadoId, string Nombre, string Institucion, string Tipo, DateOnly FechaObtencion) : IRequest<Unit>;
+
+public sealed class EditarCertificadoCvCommandHandler : IRequestHandler<EditarCertificadoCvCommand, Unit>
+{
+    private readonly ICertificadoCvRepository _certificados;
+
+    public EditarCertificadoCvCommandHandler(ICertificadoCvRepository certificados) => _certificados = certificados;
+
+    public async Task<Unit> Handle(EditarCertificadoCvCommand request, CancellationToken ct)
+    {
+        if (request.FechaObtencion > DateOnly.FromDateTime(DateTime.Today))
+            throw new ReglaDeNegocioException("La fecha de obtención no puede ser futura.");
+        var tipo = SubirCertificadoCvCommandHandler.ParseTipo(request.Tipo);
+        var cert = await _certificados.GetByIdAsync(request.CertificadoId, ct)
+            ?? throw new EntidadNoEncontradaException("El certificado no existe.");
+        if (cert.EmpleadoId != request.EmpleadoId)
+            throw new ReglaDeNegocioException("No podés modificar un certificado de otro empleado.");
+        cert.Editar(request.Nombre, request.Institucion, tipo, request.FechaObtencion);
+        await _certificados.UpdateAsync(cert, ct);
+        return Unit.Value;
+    }
+}
+
+/// <summary>Elimina un certificado propio junto con su archivo en storage.</summary>
+public sealed record EliminarCertificadoCvCommand(Guid EmpleadoId, Guid CertificadoId) : IRequest<Unit>;
+
+public sealed class EliminarCertificadoCvCommandHandler : IRequestHandler<EliminarCertificadoCvCommand, Unit>
+{
+    private readonly ICertificadoCvRepository _certificados;
+    private readonly IAdjuntoRepository _adjuntos;
+    private readonly IFileStoragePort _storage;
+
+    public EliminarCertificadoCvCommandHandler(ICertificadoCvRepository certificados, IAdjuntoRepository adjuntos,
+        IFileStoragePort storage)
+    {
+        _certificados = certificados;
+        _adjuntos = adjuntos;
+        _storage = storage;
+    }
+
+    public async Task<Unit> Handle(EliminarCertificadoCvCommand request, CancellationToken ct)
+    {
+        var cert = await _certificados.GetByIdAsync(request.CertificadoId, ct)
+            ?? throw new EntidadNoEncontradaException("El certificado no existe.");
+        if (cert.EmpleadoId != request.EmpleadoId)
+            throw new ReglaDeNegocioException("No podés eliminar un certificado de otro empleado.");
+        var adj = await _adjuntos.GetByIdAsync(cert.AdjuntoId, ct);
+        if (adj is not null) try { await _storage.EliminarAsync(adj.StorageKey, ct); } catch { }
+        await _certificados.DeleteAsync(cert, ct);
+        return Unit.Value;
+    }
+}
+
 /// <summary>"Mis certificados CV": lista de certificados subidos por el empleado.</summary>
 public sealed record GetMisCertificadosCvQuery(Guid EmpleadoId) : IRequest<IReadOnlyList<CertificadoCvDto>>;
 
@@ -178,12 +233,18 @@ public sealed class GenerarMiCvQueryHandler : IRequestHandler<GenerarMiCvQuery, 
     private readonly ICertificadoCvRepository _certificados;
     private readonly ICvExperienciaRepository _experiencias;
     private readonly ICvAntecedenteAcademicoRepository _antecedentes;
+    private readonly ICvExperienciaAdjuntoRepository _adjuntosExp;
+    private readonly ICvAntecedenteAdjuntoRepository _adjuntosAnt;
+    private readonly ICvAntecedenteItemRepository _itemsCv;
+    private readonly ICvItemAdjuntoRepository _adjuntosItemCv;
     private readonly IAreaRepository _areas;
     private readonly IAdjuntoRepository _adjuntos;
     private readonly IFileStoragePort _storage;
 
     public GenerarMiCvQueryHandler(IEmpleadoRepository empleados, ICertificadoCvRepository certificados,
         ICvExperienciaRepository experiencias, ICvAntecedenteAcademicoRepository antecedentes,
+        ICvExperienciaAdjuntoRepository adjuntosExp, ICvAntecedenteAdjuntoRepository adjuntosAnt,
+        ICvAntecedenteItemRepository itemsCv, ICvItemAdjuntoRepository adjuntosItemCv,
         IAreaRepository areas, IAdjuntoRepository adjuntos,
         IFileStoragePort storage)
     {
@@ -191,6 +252,10 @@ public sealed class GenerarMiCvQueryHandler : IRequestHandler<GenerarMiCvQuery, 
         _certificados = certificados;
         _experiencias = experiencias;
         _antecedentes = antecedentes;
+        _adjuntosExp = adjuntosExp;
+        _adjuntosAnt = adjuntosAnt;
+        _itemsCv = itemsCv;
+        _adjuntosItemCv = adjuntosItemCv;
         _areas = areas;
         _adjuntos = adjuntos;
         _storage = storage;
@@ -221,6 +286,11 @@ public sealed class GenerarMiCvQueryHandler : IRequestHandler<GenerarMiCvQuery, 
             .Select(a => new DatoCvAntecedente(a.Titulo, a.Institucion, a.Nivel.ToString(), a.Descripcion, a.FechaDesde, a.FechaHasta))
             .ToList();
 
+        var itemsCv = (await _itemsCv.GetByEmpleadoAsync(request.EmpleadoId, ct))
+            .Select(i => new DatoCvItem(ToSeccionNombre(i.Seccion), i.Categoria, i.Titulo, i.Institucion,
+                i.Descripcion, i.FechaDesde, i.FechaHasta))
+            .ToList();
+
         string? area = null;
         if (empleado.AreaId is { } areaId)
         {
@@ -237,18 +307,57 @@ public sealed class GenerarMiCvQueryHandler : IRequestHandler<GenerarMiCvQuery, 
             await using var stream = await _storage.AbrirAsync(adjunto.StorageKey, ct);
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms, ct);
-            archivos.Add(new ArchivoCertificadoCv(adjunto.NombreArchivo, adjunto.ContentType, ms.ToArray()));
+            // En el índice, los certificados se muestran con el nombre del curso/carrera
+            archivos.Add(new ArchivoCertificadoCv(c.Nombre, adjunto.ContentType, ms.ToArray(),
+                c.Institucion, c.Tipo.ToString(), c.FechaObtencion.ToString("dd/MM/yyyy")));
         }
         foreach (var ant in (await _antecedentes.GetByEmpleadoAsync(request.EmpleadoId, ct))
             .OrderByDescending(a => a.FechaHasta ?? DateOnly.FromDateTime(DateTime.Today))
             .ThenByDescending(a => a.FechaDesde))
         {
-            var adjunto = await _adjuntos.GetByIdAsync(ant.AdjuntoId, ct);
-            if (adjunto is null) continue;
-            await using var stream = await _storage.AbrirAsync(adjunto.StorageKey, ct);
-            using var ms = new MemoryStream();
-            await stream.CopyToAsync(ms, ct);
-            archivos.Add(new ArchivoCertificadoCv(adjunto.NombreArchivo, adjunto.ContentType, ms.ToArray()));
+            var adjuntosAnt = await _adjuntosAnt.GetByAntecedenteAsync(ant.Id, ct);
+            foreach (var aa in adjuntosAnt)
+            {
+                var adjunto = await _adjuntos.GetByIdAsync(aa.AdjuntoId, ct);
+                if (adjunto is null) continue;
+                await using var stream = await _storage.AbrirAsync(adjunto.StorageKey, ct);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms, ct);
+                var periodoAnt = $"{ant.FechaDesde:MM/yyyy} – {(ant.FechaHasta?.ToString("MM/yyyy") ?? "actualidad")}";
+                archivos.Add(new ArchivoCertificadoCv($"{ant.Titulo} — {adjunto.NombreArchivo}", adjunto.ContentType, ms.ToArray(),
+                    ant.Institucion, "Antecedente académico", periodoAnt));
+            }
+        }
+        foreach (var exp in await _experiencias.GetByEmpleadoAsync(request.EmpleadoId, ct))
+        {
+            var adjuntosExp = await _adjuntosExp.GetByExperienciaAsync(exp.Id, ct);
+            foreach (var ae in adjuntosExp)
+            {
+                var adjunto = await _adjuntos.GetByIdAsync(ae.AdjuntoId, ct);
+                if (adjunto is null) continue;
+                await using var stream = await _storage.AbrirAsync(adjunto.StorageKey, ct);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms, ct);
+                var periodoExp = $"{exp.FechaDesde:MM/yyyy} – {(exp.FechaHasta?.ToString("MM/yyyy") ?? "actualidad")}";
+                archivos.Add(new ArchivoCertificadoCv($"{exp.Puesto} — {adjunto.NombreArchivo}", adjunto.ContentType, ms.ToArray(),
+                    exp.Institucion, "Experiencia laboral", periodoExp));
+            }
+        }
+
+        foreach (var item in await _itemsCv.GetByEmpleadoAsync(request.EmpleadoId, ct))
+        {
+            var joinsItem = await _adjuntosItemCv.GetByItemAsync(item.Id, ct);
+            foreach (var j in joinsItem)
+            {
+                var adjunto = await _adjuntos.GetByIdAsync(j.AdjuntoId, ct);
+                if (adjunto is null) continue;
+                await using var stream = await _storage.AbrirAsync(adjunto.StorageKey, ct);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms, ct);
+                var periodoItem = $"{item.FechaDesde:MM/yyyy} – {(item.FechaHasta?.ToString("MM/yyyy") ?? "actualidad")}";
+                archivos.Add(new ArchivoCertificadoCv($"{item.Titulo} — {adjunto.NombreArchivo}", adjunto.ContentType, ms.ToArray(),
+                    item.Institucion, item.Categoria, periodoItem));
+            }
         }
 
         return new CvCompletoDto(
@@ -257,17 +366,28 @@ public sealed class GenerarMiCvQueryHandler : IRequestHandler<GenerarMiCvQuery, 
                     empleado.Dni, area, empleado.CvObservaciones, empleado.CvTelefono),
                 certificados,
                 experiencias,
-                antecedentes),
+                antecedentes,
+                itemsCv),
             archivos);
     }
+
+    private static string ToSeccionNombre(SeccionCvItem s) => s switch
+    {
+        SeccionCvItem.AntecedentesProfArtisticos => "Antecedentes profesionales y/o artísticos",
+        SeccionCvItem.Produccion => "Producción",
+        _ => "Otros antecedentes"
+    };
 }
 
+public sealed record ExperienciaAdjuntoDto(Guid Id, Guid AdjuntoId, string NombreArchivo, string ContentType, long TamanoBytes, DateTime FechaCarga);
+
 public sealed record ExperienciaCvDto(Guid Id, string Puesto, string Institucion, string? Descripcion,
-    DateOnly FechaDesde, DateOnly? FechaHasta);
+    DateOnly FechaDesde, DateOnly? FechaHasta, IReadOnlyList<ExperienciaAdjuntoDto>? Adjuntos = null);
 
 public sealed record AntecedenteAcademicoDto(Guid Id, string Titulo, string Institucion, string Nivel,
     string? Descripcion, DateOnly FechaDesde, DateOnly? FechaHasta,
-    Guid AdjuntoId, string NombreArchivo, long TamanoBytes, DateTime FechaCarga);
+    Guid AdjuntoId, string NombreArchivo, long TamanoBytes, DateTime FechaCarga,
+    IReadOnlyList<ExperienciaAdjuntoDto>? Adjuntos = null);
 
 /// <summary>Lista las experiencias laborales declaradas por el propio empleado.</summary>
 public sealed record ListarMisExperienciasQuery(Guid EmpleadoId) : IRequest<IReadOnlyList<ExperienciaCvDto>>;
@@ -275,15 +395,37 @@ public sealed record ListarMisExperienciasQuery(Guid EmpleadoId) : IRequest<IRea
 public sealed class ListarMisExperienciasQueryHandler : IRequestHandler<ListarMisExperienciasQuery, IReadOnlyList<ExperienciaCvDto>>
 {
     private readonly ICvExperienciaRepository _experiencias;
+    private readonly ICvExperienciaAdjuntoRepository _adjuntosExp;
+    private readonly IAdjuntoRepository _adjuntos;
 
-    public ListarMisExperienciasQueryHandler(ICvExperienciaRepository experiencias) => _experiencias = experiencias;
+    public ListarMisExperienciasQueryHandler(ICvExperienciaRepository experiencias, ICvExperienciaAdjuntoRepository adjuntosExp, IAdjuntoRepository adjuntos)
+    {
+        _experiencias = experiencias;
+        _adjuntosExp = adjuntosExp;
+        _adjuntos = adjuntos;
+    }
 
-    public async Task<IReadOnlyList<ExperienciaCvDto>> Handle(ListarMisExperienciasQuery request, CancellationToken ct) =>
-        (await _experiencias.GetByEmpleadoAsync(request.EmpleadoId, ct))
+    public async Task<IReadOnlyList<ExperienciaCvDto>> Handle(ListarMisExperienciasQuery request, CancellationToken ct)
+    {
+        var exps = (await _experiencias.GetByEmpleadoAsync(request.EmpleadoId, ct))
             .OrderByDescending(e => e.FechaHasta ?? DateOnly.FromDateTime(DateTime.Today))
             .ThenByDescending(e => e.FechaDesde)
-            .Select(e => new ExperienciaCvDto(e.Id, e.Puesto, e.Institucion, e.Descripcion, e.FechaDesde, e.FechaHasta))
             .ToList();
+        var resultado = new List<ExperienciaCvDto>(exps.Count);
+        foreach (var e in exps)
+        {
+            var adjuntosExp = await _adjuntosExp.GetByExperienciaAsync(e.Id, ct);
+            var adjuntosDto = new List<ExperienciaAdjuntoDto>(adjuntosExp.Count);
+            foreach (var ae in adjuntosExp)
+            {
+                var adj = await _adjuntos.GetByIdAsync(ae.AdjuntoId, ct);
+                if (adj is null) continue;
+                adjuntosDto.Add(new ExperienciaAdjuntoDto(ae.Id, adj.Id, adj.NombreArchivo, adj.ContentType, adj.TamañoBytes, ae.FechaCarga));
+            }
+            resultado.Add(new ExperienciaCvDto(e.Id, e.Puesto, e.Institucion, e.Descripcion, e.FechaDesde, e.FechaHasta, adjuntosDto));
+        }
+        return resultado;
+    }
 }
 
 /// <summary>Crea una experiencia laboral en el CV del propio empleado.</summary>
@@ -308,7 +450,7 @@ public sealed class CrearExperienciaCvCommandHandler : IRequestHandler<CrearExpe
         await _experiencias.AddAsync(experiencia, ct);
 
         return new ExperienciaCvDto(experiencia.Id, experiencia.Puesto, experiencia.Institucion,
-            experiencia.Descripcion, experiencia.FechaDesde, experiencia.FechaHasta);
+            experiencia.Descripcion, experiencia.FechaDesde, experiencia.FechaHasta, Array.Empty<ExperienciaAdjuntoDto>());
     }
 }
 
@@ -347,8 +489,17 @@ public sealed record EliminarExperienciaCvCommand(Guid EmpleadoId, Guid Experien
 public sealed class EliminarExperienciaCvCommandHandler : IRequestHandler<EliminarExperienciaCvCommand, Unit>
 {
     private readonly ICvExperienciaRepository _experiencias;
+    private readonly ICvExperienciaAdjuntoRepository _adjuntosExp;
+    private readonly IAdjuntoRepository _adjuntos;
+    private readonly IFileStoragePort _storage;
 
-    public EliminarExperienciaCvCommandHandler(ICvExperienciaRepository experiencias) => _experiencias = experiencias;
+    public EliminarExperienciaCvCommandHandler(ICvExperienciaRepository experiencias, ICvExperienciaAdjuntoRepository adjuntosExp, IAdjuntoRepository adjuntos, IFileStoragePort storage)
+    {
+        _experiencias = experiencias;
+        _adjuntosExp = adjuntosExp;
+        _adjuntos = adjuntos;
+        _storage = storage;
+    }
 
     public async Task<Unit> Handle(EliminarExperienciaCvCommand request, CancellationToken ct)
     {
@@ -357,8 +508,129 @@ public sealed class EliminarExperienciaCvCommandHandler : IRequestHandler<Elimin
         if (experiencia.EmpleadoId != request.EmpleadoId)
             throw new ReglaDeNegocioException("No podés eliminar una experiencia de otro empleado.");
 
+        var adjuntosExp = await _adjuntosExp.GetByExperienciaAsync(experiencia.Id, ct);
+        foreach (var ae in adjuntosExp)
+        {
+            var adj = await _adjuntos.GetByIdAsync(ae.AdjuntoId, ct);
+            if (adj is not null) try { await _storage.EliminarAsync(adj.StorageKey, ct); } catch { }
+            await _adjuntosExp.DeleteAsync(ae, ct);
+        }
+
         await _experiencias.DeleteAsync(experiencia, ct);
         return Unit.Value;
+    }
+}
+
+public sealed record SubirExperienciaAdjuntoCommand(Guid EmpleadoId, Guid ExperienciaId, string ArchivoNombre, string ContentType, Stream Contenido) : IRequest<ExperienciaAdjuntoDto>;
+
+public sealed class SubirExperienciaAdjuntoCommandHandler : IRequestHandler<SubirExperienciaAdjuntoCommand, ExperienciaAdjuntoDto>
+{
+    private static readonly string[] ExtensionesPermitidas = { ".pdf", ".jpg", ".jpeg", ".png" };
+    private const long MaxBytes = 10 * 1024 * 1024;
+    private readonly ICvExperienciaRepository _experiencias;
+    private readonly ICvExperienciaAdjuntoRepository _adjuntosExp;
+    private readonly IAdjuntoRepository _adjuntos;
+    private readonly IFileStoragePort _storage;
+
+    public SubirExperienciaAdjuntoCommandHandler(ICvExperienciaRepository experiencias, ICvExperienciaAdjuntoRepository adjuntosExp, IAdjuntoRepository adjuntos, IFileStoragePort storage)
+    {
+        _experiencias = experiencias;
+        _adjuntosExp = adjuntosExp;
+        _adjuntos = adjuntos;
+        _storage = storage;
+    }
+
+    public async Task<ExperienciaAdjuntoDto> Handle(SubirExperienciaAdjuntoCommand request, CancellationToken ct)
+    {
+        var experiencia = await _experiencias.GetByIdAsync(request.ExperienciaId, ct)
+            ?? throw new EntidadNoEncontradaException("La experiencia no existe.");
+        if (experiencia.EmpleadoId != request.EmpleadoId)
+            throw new ReglaDeNegocioException("No podés agregar anexos a una experiencia de otro empleado.");
+        var existentes = await _adjuntosExp.GetByExperienciaAsync(request.ExperienciaId, ct);
+        if (existentes.Count >= 5)
+            throw new ReglaDeNegocioException("Máximo 5 anexos por experiencia.");
+        var extension = Path.GetExtension(request.ArchivoNombre).ToLowerInvariant();
+        if (!ExtensionesPermitidas.Contains(extension))
+            throw new ReglaDeNegocioException("Solo se permiten archivos PDF, JPG o PNG.");
+        if (request.Contenido.Length > MaxBytes)
+            throw new ReglaDeNegocioException("El archivo supera los 10 MB.");
+        var adjuntoId = Guid.NewGuid();
+        var storageKey = $"cv-experiencia/{adjuntoId}{extension}";
+        await _storage.GuardarAsync(storageKey, request.ContentType, request.Contenido, ct);
+        var adjunto = new Adjunto(request.ArchivoNombre, request.ContentType, request.Contenido.Length, storageKey, request.EmpleadoId);
+        adjunto.VincularAEntidad("experiencia_cv", adjuntoId);
+        await _adjuntos.AddAsync(adjunto, ct);
+        var expAdj = new CvExperienciaAdjunto(request.ExperienciaId, adjunto.Id);
+        await _adjuntosExp.AddAsync(expAdj, ct);
+        return new ExperienciaAdjuntoDto(expAdj.Id, adjunto.Id, adjunto.NombreArchivo, adjunto.ContentType, adjunto.TamañoBytes, expAdj.FechaCarga);
+    }
+}
+
+public sealed record EliminarExperienciaAdjuntoCommand(Guid EmpleadoId, Guid ExperienciaId, Guid AdjuntoId) : IRequest<Unit>;
+
+public sealed class EliminarExperienciaAdjuntoCommandHandler : IRequestHandler<EliminarExperienciaAdjuntoCommand, Unit>
+{
+    private readonly ICvExperienciaRepository _experiencias;
+    private readonly ICvExperienciaAdjuntoRepository _adjuntosExp;
+    private readonly IAdjuntoRepository _adjuntos;
+    private readonly IFileStoragePort _storage;
+
+    public EliminarExperienciaAdjuntoCommandHandler(ICvExperienciaRepository experiencias, ICvExperienciaAdjuntoRepository adjuntosExp, IAdjuntoRepository adjuntos, IFileStoragePort storage)
+    {
+        _experiencias = experiencias;
+        _adjuntosExp = adjuntosExp;
+        _adjuntos = adjuntos;
+        _storage = storage;
+    }
+
+    public async Task<Unit> Handle(EliminarExperienciaAdjuntoCommand request, CancellationToken ct)
+    {
+        var experiencia = await _experiencias.GetByIdAsync(request.ExperienciaId, ct)
+            ?? throw new EntidadNoEncontradaException("La experiencia no existe.");
+        if (experiencia.EmpleadoId != request.EmpleadoId)
+            throw new ReglaDeNegocioException("No podés eliminar anexos de una experiencia de otro empleado.");
+        var expAdj = await _adjuntosExp.GetByIdAsync(request.AdjuntoId, ct)
+            ?? await _adjuntosExp.GetByAdjuntoIdAsync(request.AdjuntoId, ct)
+            ?? throw new EntidadNoEncontradaException("El anexo no existe.");
+        if (expAdj.ExperienciaId != request.ExperienciaId)
+            throw new EntidadNoEncontradaException("El anexo no pertenece a esa experiencia.");
+        var adj = await _adjuntos.GetByIdAsync(expAdj.AdjuntoId, ct);
+        if (adj is not null) try { await _storage.EliminarAsync(adj.StorageKey, ct); } catch { }
+        await _adjuntosExp.DeleteAsync(expAdj, ct);
+        return Unit.Value;
+    }
+}
+
+public sealed record DescargarExperienciaAdjuntoQuery(Guid ExperienciaId, Guid AdjuntoId, Guid EmpleadoIdSolicitante, IReadOnlyCollection<string> RolesSolicitante) : IRequest<(Stream Contenido, string NombreArchivo, string ContentType)>;
+
+public sealed class DescargarExperienciaAdjuntoQueryHandler : IRequestHandler<DescargarExperienciaAdjuntoQuery, (Stream, string, string)>
+{
+    private readonly ICvExperienciaRepository _experiencias;
+    private readonly ICvExperienciaAdjuntoRepository _adjuntosExp;
+    private readonly IAdjuntoRepository _adjuntos;
+    private readonly IFileStoragePort _storage;
+
+    public DescargarExperienciaAdjuntoQueryHandler(ICvExperienciaRepository experiencias, ICvExperienciaAdjuntoRepository adjuntosExp, IAdjuntoRepository adjuntos, IFileStoragePort storage)
+    {
+        _experiencias = experiencias;
+        _adjuntosExp = adjuntosExp;
+        _adjuntos = adjuntos;
+        _storage = storage;
+    }
+
+    public async Task<(Stream, string, string)> Handle(DescargarExperienciaAdjuntoQuery request, CancellationToken ct)
+    {
+        var exp = await _experiencias.GetByIdAsync(request.ExperienciaId, ct)
+            ?? throw new EntidadNoEncontradaException("La experiencia no existe.");
+        var expAdj = await _adjuntosExp.GetByIdAsync(request.AdjuntoId, ct)
+            ?? await _adjuntosExp.GetByAdjuntoIdAsync(request.AdjuntoId, ct)
+            ?? throw new EntidadNoEncontradaException("El anexo no existe.");
+        if (expAdj.ExperienciaId != request.ExperienciaId)
+            throw new EntidadNoEncontradaException("El anexo no pertenece a esa experiencia.");
+        var adj = await _adjuntos.GetByIdAsync(expAdj.AdjuntoId, ct)
+            ?? throw new EntidadNoEncontradaException("El archivo no existe.");
+        var stream = await _storage.AbrirAsync(adj.StorageKey, ct);
+        return (stream, adj.NombreArchivo, adj.ContentType);
     }
 }
 
@@ -526,13 +798,15 @@ public sealed class SubirAntecedenteAcademicoCommandHandler : IRequestHandler<Su
     private const long MaxBytes = 10 * 1024 * 1024;
 
     private readonly ICvAntecedenteAcademicoRepository _antecedentes;
+    private readonly ICvAntecedenteAdjuntoRepository _adjuntosAnt;
     private readonly IAdjuntoRepository _adjuntos;
     private readonly IFileStoragePort _storage;
 
     public SubirAntecedenteAcademicoCommandHandler(ICvAntecedenteAcademicoRepository antecedentes,
-        IAdjuntoRepository adjuntos, IFileStoragePort storage)
+        ICvAntecedenteAdjuntoRepository adjuntosAnt, IAdjuntoRepository adjuntos, IFileStoragePort storage)
     {
         _antecedentes = antecedentes;
+        _adjuntosAnt = adjuntosAnt;
         _adjuntos = adjuntos;
         _storage = storage;
     }
@@ -562,9 +836,16 @@ public sealed class SubirAntecedenteAcademicoCommandHandler : IRequestHandler<Su
             nivel, request.Descripcion, request.FechaDesde, request.FechaHasta, adjunto.Id);
         await _antecedentes.AddAsync(antecedente, ct);
 
+        var antAdj = new CvAntecedenteAdjunto(antecedente.Id, adjunto.Id);
+        await _adjuntosAnt.AddAsync(antAdj, ct);
+
+        var adjuntosDto = new List<ExperienciaAdjuntoDto>
+        {
+            new(antAdj.Id, adjunto.Id, adjunto.NombreArchivo, adjunto.ContentType, adjunto.TamañoBytes, antAdj.FechaCarga)
+        };
         return new AntecedenteAcademicoDto(antecedente.Id, antecedente.Titulo, antecedente.Institucion,
             antecedente.Nivel.ToString(), antecedente.Descripcion, antecedente.FechaDesde, antecedente.FechaHasta,
-            adjunto.Id, adjunto.NombreArchivo, adjunto.TamañoBytes, antecedente.FechaCarga);
+            adjunto.Id, adjunto.NombreArchivo, adjunto.TamañoBytes, antecedente.FechaCarga, adjuntosDto);
     }
 }
 
@@ -573,11 +854,14 @@ public sealed record ListarMisAntecedentesQuery(Guid EmpleadoId) : IRequest<IRea
 public sealed class ListarMisAntecedentesQueryHandler : IRequestHandler<ListarMisAntecedentesQuery, IReadOnlyList<AntecedenteAcademicoDto>>
 {
     private readonly ICvAntecedenteAcademicoRepository _antecedentes;
+    private readonly ICvAntecedenteAdjuntoRepository _adjuntosAnt;
     private readonly IAdjuntoRepository _adjuntos;
 
-    public ListarMisAntecedentesQueryHandler(ICvAntecedenteAcademicoRepository antecedentes, IAdjuntoRepository adjuntos)
+    public ListarMisAntecedentesQueryHandler(ICvAntecedenteAcademicoRepository antecedentes,
+        ICvAntecedenteAdjuntoRepository adjuntosAnt, IAdjuntoRepository adjuntos)
     {
         _antecedentes = antecedentes;
+        _adjuntosAnt = adjuntosAnt;
         _adjuntos = adjuntos;
     }
 
@@ -590,10 +874,19 @@ public sealed class ListarMisAntecedentesQueryHandler : IRequestHandler<ListarMi
         var resultado = new List<AntecedenteAcademicoDto>(lista.Count);
         foreach (var a in lista)
         {
-            var adj = await _adjuntos.GetByIdAsync(a.AdjuntoId, ct);
+            var adjuntosAnt = await _adjuntosAnt.GetByAntecedenteAsync(a.Id, ct);
+            var adjuntosDto = new List<ExperienciaAdjuntoDto>(adjuntosAnt.Count);
+            foreach (var aa in adjuntosAnt)
+            {
+                var adj = await _adjuntos.GetByIdAsync(aa.AdjuntoId, ct);
+                if (adj is null) continue;
+                adjuntosDto.Add(new ExperienciaAdjuntoDto(aa.Id, adj.Id, adj.NombreArchivo, adj.ContentType, adj.TamañoBytes, aa.FechaCarga));
+            }
+            var primero = adjuntosDto.FirstOrDefault();
             resultado.Add(new AntecedenteAcademicoDto(a.Id, a.Titulo, a.Institucion, a.Nivel.ToString(),
-                a.Descripcion, a.FechaDesde, a.FechaHasta, a.AdjuntoId,
-                adj?.NombreArchivo ?? "", adj?.TamañoBytes ?? 0, a.FechaCarga));
+                a.Descripcion, a.FechaDesde, a.FechaHasta,
+                primero?.AdjuntoId ?? a.AdjuntoId, primero?.NombreArchivo ?? "", primero?.TamanoBytes ?? 0, a.FechaCarga,
+                adjuntosDto));
         }
         return resultado;
     }
@@ -630,13 +923,15 @@ public sealed record EliminarAntecedenteAcademicoCommand(Guid EmpleadoId, Guid A
 public sealed class EliminarAntecedenteAcademicoCommandHandler : IRequestHandler<EliminarAntecedenteAcademicoCommand, Unit>
 {
     private readonly ICvAntecedenteAcademicoRepository _antecedentes;
+    private readonly ICvAntecedenteAdjuntoRepository _adjuntosAnt;
     private readonly IAdjuntoRepository _adjuntos;
     private readonly IFileStoragePort _storage;
 
     public EliminarAntecedenteAcademicoCommandHandler(ICvAntecedenteAcademicoRepository antecedentes,
-        IAdjuntoRepository adjuntos, IFileStoragePort storage)
+        ICvAntecedenteAdjuntoRepository adjuntosAnt, IAdjuntoRepository adjuntos, IFileStoragePort storage)
     {
         _antecedentes = antecedentes;
+        _adjuntosAnt = adjuntosAnt;
         _adjuntos = adjuntos;
         _storage = storage;
     }
@@ -647,10 +942,12 @@ public sealed class EliminarAntecedenteAcademicoCommandHandler : IRequestHandler
             ?? throw new EntidadNoEncontradaException("El antecedente no existe.");
         if (ant.EmpleadoId != request.EmpleadoId)
             throw new ReglaDeNegocioException("No podés eliminar un antecedente de otro empleado.");
-        var adj = await _adjuntos.GetByIdAsync(ant.AdjuntoId, ct);
-        if (adj is not null)
+        var adjuntosAnt = await _adjuntosAnt.GetByAntecedenteAsync(ant.Id, ct);
+        foreach (var aa in adjuntosAnt)
         {
-            try { await _storage.EliminarAsync(adj.StorageKey, ct); } catch { }
+            var adj = await _adjuntos.GetByIdAsync(aa.AdjuntoId, ct);
+            if (adj is not null) try { await _storage.EliminarAsync(adj.StorageKey, ct); } catch { }
+            await _adjuntosAnt.DeleteAsync(aa, ct);
         }
         await _antecedentes.DeleteAsync(ant, ct);
         return Unit.Value;
@@ -688,6 +985,127 @@ public sealed class DescargarAntecedenteAcademicoQueryHandler
             throw new ReglaDeNegocioException("No podés ver un antecedente de otro empleado.");
         var adj = await _adjuntos.GetByIdAsync(ant.AdjuntoId, ct)
             ?? throw new EntidadNoEncontradaException("El archivo del antecedente no existe.");
+        var contenido = await _storage.AbrirAsync(adj.StorageKey, ct);
+        return (contenido, adj.NombreArchivo, adj.ContentType);
+    }
+}
+
+public sealed record SubirAntecedenteAdjuntoCommand(Guid EmpleadoId, Guid AntecedenteId, string ArchivoNombre, string ContentType, Stream Contenido) : IRequest<ExperienciaAdjuntoDto>;
+
+public sealed class SubirAntecedenteAdjuntoCommandHandler : IRequestHandler<SubirAntecedenteAdjuntoCommand, ExperienciaAdjuntoDto>
+{
+    private static readonly string[] ExtensionesPermitidas = { ".pdf", ".jpg", ".jpeg", ".png" };
+    private const long MaxBytes = 10 * 1024 * 1024;
+    private readonly ICvAntecedenteAcademicoRepository _antecedentes;
+    private readonly ICvAntecedenteAdjuntoRepository _adjuntosAnt;
+    private readonly IAdjuntoRepository _adjuntos;
+    private readonly IFileStoragePort _storage;
+
+    public SubirAntecedenteAdjuntoCommandHandler(ICvAntecedenteAcademicoRepository antecedentes,
+        ICvAntecedenteAdjuntoRepository adjuntosAnt, IAdjuntoRepository adjuntos, IFileStoragePort storage)
+    {
+        _antecedentes = antecedentes;
+        _adjuntosAnt = adjuntosAnt;
+        _adjuntos = adjuntos;
+        _storage = storage;
+    }
+
+    public async Task<ExperienciaAdjuntoDto> Handle(SubirAntecedenteAdjuntoCommand request, CancellationToken ct)
+    {
+        var antecedente = await _antecedentes.GetByIdAsync(request.AntecedenteId, ct)
+            ?? throw new EntidadNoEncontradaException("El antecedente no existe.");
+        if (antecedente.EmpleadoId != request.EmpleadoId)
+            throw new ReglaDeNegocioException("No podés agregar anexos a un antecedente de otro empleado.");
+        var existentes = await _adjuntosAnt.GetByAntecedenteAsync(request.AntecedenteId, ct);
+        if (existentes.Count >= 5)
+            throw new ReglaDeNegocioException("Máximo 5 anexos por antecedente.");
+        var extension = Path.GetExtension(request.ArchivoNombre).ToLowerInvariant();
+        if (!ExtensionesPermitidas.Contains(extension))
+            throw new ReglaDeNegocioException("Solo se permiten archivos PDF, JPG o PNG.");
+        if (request.Contenido.Length > MaxBytes)
+            throw new ReglaDeNegocioException("El archivo supera los 10 MB.");
+        var adjuntoId = Guid.NewGuid();
+        var storageKey = $"cv-antecedente/{adjuntoId}{extension}";
+        await _storage.GuardarAsync(storageKey, request.ContentType, request.Contenido, ct);
+        var adjunto = new Adjunto(request.ArchivoNombre, request.ContentType, request.Contenido.Length, storageKey, request.EmpleadoId);
+        adjunto.VincularAEntidad("antecedente_academico", adjuntoId);
+        await _adjuntos.AddAsync(adjunto, ct);
+        var antAdj = new CvAntecedenteAdjunto(request.AntecedenteId, adjunto.Id);
+        await _adjuntosAnt.AddAsync(antAdj, ct);
+        return new ExperienciaAdjuntoDto(antAdj.Id, adjunto.Id, adjunto.NombreArchivo, adjunto.ContentType, adjunto.TamañoBytes, antAdj.FechaCarga);
+    }
+}
+
+public sealed record EliminarAntecedenteAdjuntoCommand(Guid EmpleadoId, Guid AntecedenteId, Guid AdjuntoId) : IRequest<Unit>;
+
+public sealed class EliminarAntecedenteAdjuntoCommandHandler : IRequestHandler<EliminarAntecedenteAdjuntoCommand, Unit>
+{
+    private readonly ICvAntecedenteAcademicoRepository _antecedentes;
+    private readonly ICvAntecedenteAdjuntoRepository _adjuntosAnt;
+    private readonly IAdjuntoRepository _adjuntos;
+    private readonly IFileStoragePort _storage;
+
+    public EliminarAntecedenteAdjuntoCommandHandler(ICvAntecedenteAcademicoRepository antecedentes,
+        ICvAntecedenteAdjuntoRepository adjuntosAnt, IAdjuntoRepository adjuntos, IFileStoragePort storage)
+    {
+        _antecedentes = antecedentes;
+        _adjuntosAnt = adjuntosAnt;
+        _adjuntos = adjuntos;
+        _storage = storage;
+    }
+
+    public async Task<Unit> Handle(EliminarAntecedenteAdjuntoCommand request, CancellationToken ct)
+    {
+        var antecedente = await _antecedentes.GetByIdAsync(request.AntecedenteId, ct)
+            ?? throw new EntidadNoEncontradaException("El antecedente no existe.");
+        if (antecedente.EmpleadoId != request.EmpleadoId)
+            throw new ReglaDeNegocioException("No podés eliminar anexos de un antecedente de otro empleado.");
+        var antAdj = await _adjuntosAnt.GetByIdAsync(request.AdjuntoId, ct)
+            ?? await _adjuntosAnt.GetByAdjuntoIdAsync(request.AdjuntoId, ct)
+            ?? throw new EntidadNoEncontradaException("El anexo no existe.");
+        if (antAdj.AntecedenteId != request.AntecedenteId)
+            throw new EntidadNoEncontradaException("El anexo no pertenece a ese antecedente.");
+        var adj = await _adjuntos.GetByIdAsync(antAdj.AdjuntoId, ct);
+        if (adj is not null) try { await _storage.EliminarAsync(adj.StorageKey, ct); } catch { }
+        await _adjuntosAnt.DeleteAsync(antAdj, ct);
+        return Unit.Value;
+    }
+}
+
+public sealed record DescargarAntecedenteAdjuntoQuery(Guid AntecedenteId, Guid AdjuntoId, Guid EmpleadoIdSolicitante, IReadOnlyCollection<string> RolesSolicitante) : IRequest<(Stream Contenido, string NombreArchivo, string ContentType)>;
+
+public sealed class DescargarAntecedenteAdjuntoQueryHandler : IRequestHandler<DescargarAntecedenteAdjuntoQuery, (Stream, string, string)>
+{
+    private static readonly IReadOnlySet<string> Staff =
+        new HashSet<string> { "Responsable", "Rrhh", "Administrador", "Direccion" };
+    private readonly ICvAntecedenteAcademicoRepository _antecedentes;
+    private readonly ICvAntecedenteAdjuntoRepository _adjuntosAnt;
+    private readonly IAdjuntoRepository _adjuntos;
+    private readonly IFileStoragePort _storage;
+
+    public DescargarAntecedenteAdjuntoQueryHandler(ICvAntecedenteAcademicoRepository antecedentes,
+        ICvAntecedenteAdjuntoRepository adjuntosAnt, IAdjuntoRepository adjuntos, IFileStoragePort storage)
+    {
+        _antecedentes = antecedentes;
+        _adjuntosAnt = adjuntosAnt;
+        _adjuntos = adjuntos;
+        _storage = storage;
+    }
+
+    public async Task<(Stream, string, string)> Handle(DescargarAntecedenteAdjuntoQuery request, CancellationToken ct)
+    {
+        var ant = await _antecedentes.GetByIdAsync(request.AntecedenteId, ct)
+            ?? throw new EntidadNoEncontradaException("El antecedente no existe.");
+        var esStaff = request.RolesSolicitante.Any(Staff.Contains);
+        if (!esStaff && ant.EmpleadoId != request.EmpleadoIdSolicitante)
+            throw new ReglaDeNegocioException("No podés ver anexos de un antecedente de otro empleado.");
+        var antAdj = await _adjuntosAnt.GetByIdAsync(request.AdjuntoId, ct)
+            ?? await _adjuntosAnt.GetByAdjuntoIdAsync(request.AdjuntoId, ct)
+            ?? throw new EntidadNoEncontradaException("El anexo no existe.");
+        if (antAdj.AntecedenteId != request.AntecedenteId)
+            throw new EntidadNoEncontradaException("El anexo no pertenece a ese antecedente.");
+        var adj = await _adjuntos.GetByIdAsync(antAdj.AdjuntoId, ct)
+            ?? throw new EntidadNoEncontradaException("El archivo no existe.");
         var contenido = await _storage.AbrirAsync(adj.StorageKey, ct);
         return (contenido, adj.NombreArchivo, adj.ContentType);
     }

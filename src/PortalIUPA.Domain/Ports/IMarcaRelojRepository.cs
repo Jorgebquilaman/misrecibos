@@ -7,6 +7,9 @@ public interface IMarcaRelojRepository
     Task AddRangeAsync(IEnumerable<MarcaReloj> marcas, CancellationToken ct = default);
     Task<IReadOnlyList<MarcaReloj>> GetByEmpleadoBetweenAsync(Guid empleadoId, DateTime desde, DateTime hasta,
         CancellationToken ct = default);
+    /// <summary>Marcas de todos los empleados en el rango (para deduplicar descargas de relojes).</summary>
+    Task<IReadOnlyList<MarcaReloj>> GetByFechaBetweenAsync(DateTime desde, DateTime hasta,
+        CancellationToken ct = default);
     Task<IReadOnlyList<MarcaReloj>> GetByAreasBetweenAsync(IReadOnlyCollection<Guid> areaIds, DateTime desde,
         DateTime hasta, CancellationToken ct = default);
     Task<DateTime?> GetMaxFechaHoraAsync(CancellationToken ct = default);

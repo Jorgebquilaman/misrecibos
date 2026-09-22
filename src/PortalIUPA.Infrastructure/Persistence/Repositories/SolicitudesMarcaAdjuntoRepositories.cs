@@ -131,6 +131,12 @@ public sealed class MarcaRelojRepository : IMarcaRelojRepository
             .OrderBy(m => m.FechaHora)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<MarcaReloj>> GetByFechaBetweenAsync(DateTime desde, DateTime hasta,
+        CancellationToken ct = default) =>
+        await _db.MarcasReloj
+            .Where(m => m.FechaHora >= desde && m.FechaHora <= hasta)
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyList<MarcaReloj>> GetByAreasBetweenAsync(IReadOnlyCollection<Guid> areaIds,
         DateTime desde, DateTime hasta, CancellationToken ct = default)
     {

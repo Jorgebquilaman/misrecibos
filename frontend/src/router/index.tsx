@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { authApi } from '../api';
-import { puedeCargarMarcasManuales, useAuthStore } from '../store/authStore';
+import { puedeCargarMarcasManuales, esAdmin, esRrhh, useAuthStore } from '../store/authStore';
 import Layout from '../components/Layout';
 import LoginPage from '../pages/LoginPage';
 import AuthCallbackPage from '../pages/AuthCallbackPage';
@@ -23,10 +23,52 @@ import AdminAreasPage from '../pages/admin/AdminAreasPage';
 import AdminEstadisticasPage from '../pages/admin/AdminEstadisticasPage';
 import AdminReportesFichadasPage from '../pages/admin/AdminReportesFichadasPage';
 import AdminAnunciosPage from '../pages/admin/AdminAnunciosPage';
+import AdminTrazabilidadPage from '../pages/admin/AdminTrazabilidadPage';
+import AdminEdificiosPage from '../pages/admin/AdminEdificiosPage';
+import AdminRelojesPage from '../pages/admin/AdminRelojesPage';
+import AdminReportesPage from '../pages/admin/AdminReportesPage';
+import MisReportesPage from '../pages/MisReportesPage';
+import AdminDashboardsPage from '../pages/admin/AdminDashboardsPage';
+import MisDashboardsPage from '../pages/MisDashboardsPage';
 
 function MarcasManualesProtegida() {
   const roles = useAuthStore((s) => s.usuario?.roles);
   return puedeCargarMarcasManuales(roles) ? <MarcasManualesPage /> : <Navigate to="/" replace />;
+}
+
+function SoloAdminProtegida() {
+  const roles = useAuthStore((s) => s.usuario?.roles);
+  return esAdmin(roles) ? <AdminTrazabilidadPage /> : <Navigate to="/" replace />;
+}
+
+function SoloAdminEdificios() {
+  const roles = useAuthStore((s) => s.usuario?.roles);
+  return esAdmin(roles) ? <AdminEdificiosPage /> : <Navigate to="/" replace />;
+}
+
+function SoloAdminRelojes() {
+  const roles = useAuthStore((s) => s.usuario?.roles);
+  return esAdmin(roles) ? <AdminRelojesPage /> : <Navigate to="/" replace />;
+}
+
+function SoloAdminReportes() {
+  const roles = useAuthStore((s) => s.usuario?.roles);
+  return esAdmin(roles) ? <AdminReportesPage /> : <Navigate to="/" replace />;
+}
+
+function SoloRrhhReportes() {
+  const roles = useAuthStore((s) => s.usuario?.roles);
+  return esRrhh(roles) ? <MisReportesPage /> : <Navigate to="/" replace />;
+}
+
+function SoloAdminDashboards() {
+  const roles = useAuthStore((s) => s.usuario?.roles);
+  return esAdmin(roles) ? <AdminDashboardsPage /> : <Navigate to="/" replace />;
+}
+
+function SoloRrhhDashboards() {
+  const roles = useAuthStore((s) => s.usuario?.roles);
+  return esRrhh(roles) ? <MisDashboardsPage /> : <Navigate to="/" replace />;
 }
 
 export function RouterProvider() {
@@ -83,6 +125,13 @@ export function RouterProvider() {
         <Route path="/admin/estadisticas" element={<AdminEstadisticasPage />} />
         <Route path="/admin/reportes-fichadas" element={<AdminReportesFichadasPage />} />
         <Route path="/admin/anuncios" element={<AdminAnunciosPage />} />
+        <Route path="/admin/trazabilidad" element={<SoloAdminProtegida />} />
+        <Route path="/admin/edificios" element={<SoloAdminEdificios />} />
+        <Route path="/admin/relojes" element={<SoloAdminRelojes />} />
+        <Route path="/admin/reportes" element={<SoloAdminReportes />} />
+        <Route path="/reportes" element={<SoloRrhhReportes />} />
+        <Route path="/admin/dashboards" element={<SoloAdminDashboards />} />
+        <Route path="/dashboards" element={<SoloRrhhDashboards />} />
       </Route>
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />

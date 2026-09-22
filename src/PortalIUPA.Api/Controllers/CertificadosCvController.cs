@@ -1,9 +1,11 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using PortalIUPA.Api.Auth;
 using PortalIUPA.Application.UseCases.CertificadosCv;
 using PortalIUPA.Domain.Ports;
+using PortalIUPA.Infrastructure.Pdf.Trazabilidad;
 
 namespace PortalIUPA.Api.Controllers;
 
@@ -16,11 +18,19 @@ public sealed class CertificadosCvController : ApiControllerBase
 
     private readonly IMediator _mediator;
     private readonly IGeneradorPdfCv _generadorCv;
+    private readonly IPdfTrazabilidadService _trazabilidad;
+    private readonly IOptions<TrazabilidadOptions> _trazabilidadOptions;
 
-    public CertificadosCvController(IMediator mediator, IGeneradorPdfCv generadorCv)
+    public CertificadosCvController(
+        IMediator mediator,
+        IGeneradorPdfCv generadorCv,
+        IPdfTrazabilidadService trazabilidad,
+        IOptions<TrazabilidadOptions> trazabilidadOptions)
     {
         _mediator = mediator;
         _generadorCv = generadorCv;
+        _trazabilidad = trazabilidad;
+        _trazabilidadOptions = trazabilidadOptions;
     }
 
     /// <summary>Antecedentes académicos del empleado para su CV.</summary>
@@ -66,6 +76,87 @@ public sealed class CertificadosCvController : ApiControllerBase
         return File(contenido, contentType, nombreArchivo);
     }
 
+    [HttpPost("antecedentes/{id:guid}/adjuntos")]
+    [RequestSizeLimit(MaxBytes + 1024)]
+    public async Task<IActionResult> SubirAntecedenteAdjunto(Guid id, IFormFile archivo)
+    {
+        if (archivo is null || archivo.Length == 0)
+            return BadRequest(new { error = "Debe adjuntar un archivo (PDF, JPG o PNG)." });
+        await using var stream = archivo.OpenReadStream();
+        var dto = await _mediator.Send(new SubirAntecedenteAdjuntoCommand(EmpleadoId, id, archivo.FileName, archivo.ContentType, stream));
+        return Ok(dto);
+    }
+
+    [HttpDelete("antecedentes/{id:guid}/adjuntos/{adjuntoId:guid}")]
+    public async Task<IActionResult> EliminarAntecedenteAdjunto(Guid id, Guid adjuntoId)
+    {
+        await _mediator.Send(new EliminarAntecedenteAdjuntoCommand(EmpleadoId, id, adjuntoId));
+        return NoContent();
+    }
+
+    [HttpGet("antecedentes/{id:guid}/adjuntos/{adjuntoId:guid}/archivo")]
+    public async Task<IActionResult> DescargarAntecedenteAdjunto(Guid id, Guid adjuntoId)
+    {
+        var (contenido, nombreArchivo, contentType) =
+            await _mediator.Send(new DescargarAntecedenteAdjuntoQuery(id, adjuntoId, EmpleadoId, User.GetRoles()));
+        return File(contenido, contentType, nombreArchivo);
+    }
+
+    /// <summary>Ítems de antecedentes profesionales/artísticos, producción y otros antecedentes del CV.</summary>
+    [HttpGet("items")]
+    public async Task<IActionResult> MisItems() =>
+        Ok(await _mediator.Send(new ListarCvItemsQuery(EmpleadoId)));
+
+    [HttpPost("items")]
+    public async Task<IActionResult> CrearItem([FromBody] CvItemRequest request) =>
+        Ok(await _mediator.Send(new CrearCvItemCommand(EmpleadoId, request.Seccion, request.Categoria,
+            request.Titulo, request.Institucion, request.Descripcion, request.FechaDesde, request.FechaHasta)));
+
+    [HttpPut("items/{id:guid}")]
+    public async Task<IActionResult> EditarItem(Guid id, [FromBody] CvItemRequest request)
+    {
+        await _mediator.Send(new EditarCvItemCommand(EmpleadoId, id, request.Seccion, request.Categoria,
+            request.Titulo, request.Institucion, request.Descripcion, request.FechaDesde, request.FechaHasta));
+        return NoContent();
+    }
+
+    [HttpPost("items/{id:guid}/duplicar")]
+    public async Task<IActionResult> DuplicarItem(Guid id) =>
+        Ok(await _mediator.Send(new DuplicarCvItemCommand(EmpleadoId, id)));
+
+    [HttpDelete("items/{id:guid}")]
+    public async Task<IActionResult> EliminarItem(Guid id)
+    {
+        await _mediator.Send(new EliminarCvItemCommand(EmpleadoId, id));
+        return NoContent();
+    }
+
+    [HttpPost("items/{id:guid}/adjuntos")]
+    [RequestSizeLimit(MaxBytes + 1024)]
+    public async Task<IActionResult> SubirItemAdjunto(Guid id, IFormFile archivo)
+    {
+        if (archivo is null || archivo.Length == 0)
+            return BadRequest(new { error = "Debe adjuntar un archivo (PDF, JPG o PNG)." });
+        await using var stream = archivo.OpenReadStream();
+        var dto = await _mediator.Send(new SubirCvItemAdjuntoCommand(EmpleadoId, id, archivo.FileName, archivo.ContentType, stream));
+        return Ok(dto);
+    }
+
+    [HttpDelete("items/{id:guid}/adjuntos/{adjuntoId:guid}")]
+    public async Task<IActionResult> EliminarItemAdjunto(Guid id, Guid adjuntoId)
+    {
+        await _mediator.Send(new EliminarCvItemAdjuntoCommand(EmpleadoId, id, adjuntoId));
+        return NoContent();
+    }
+
+    [HttpGet("items/{id:guid}/adjuntos/{adjuntoId:guid}/archivo")]
+    public async Task<IActionResult> DescargarItemAdjunto(Guid id, Guid adjuntoId)
+    {
+        var (contenido, nombreArchivo, contentType) =
+            await _mediator.Send(new DescargarCvItemAdjuntoQuery(id, adjuntoId, EmpleadoId));
+        return File(contenido, contentType, nombreArchivo);
+    }
+
     /// <summary>Experiencias laborales del empleado para su CV.</summary>
     [HttpGet("experiencias")]
     public async Task<IActionResult> MisExperiencias() =>
@@ -89,6 +180,31 @@ public sealed class CertificadosCvController : ApiControllerBase
     {
         await _mediator.Send(new EliminarExperienciaCvCommand(EmpleadoId, id));
         return NoContent();
+    }
+
+    [HttpPost("experiencias/{id:guid}/adjuntos")]
+    [RequestSizeLimit(MaxBytes + 1024)]
+    public async Task<IActionResult> SubirExperienciaAdjunto(Guid id, IFormFile archivo)
+    {
+        if (archivo is null || archivo.Length == 0)
+            return BadRequest(new { error = "Debe adjuntar un archivo (PDF, JPG o PNG)." });
+        await using var stream = archivo.OpenReadStream();
+        var dto = await _mediator.Send(new SubirExperienciaAdjuntoCommand(EmpleadoId, id, archivo.FileName, archivo.ContentType, stream));
+        return Ok(dto);
+    }
+
+    [HttpDelete("experiencias/{id:guid}/adjuntos/{adjuntoId:guid}")]
+    public async Task<IActionResult> EliminarExperienciaAdjunto(Guid id, Guid adjuntoId)
+    {
+        await _mediator.Send(new EliminarExperienciaAdjuntoCommand(EmpleadoId, id, adjuntoId));
+        return NoContent();
+    }
+
+    [HttpGet("experiencias/{id:guid}/adjuntos/{adjuntoId:guid}/archivo")]
+    public async Task<IActionResult> DescargarExperienciaAdjunto(Guid id, Guid adjuntoId)
+    {
+        var (contenido, nombreArchivo, contentType) = await _mediator.Send(new DescargarExperienciaAdjuntoQuery(id, adjuntoId, EmpleadoId, User.GetRoles()));
+        return File(contenido, contentType, nombreArchivo);
     }
 
     /// <summary>Teléfono de contacto del CV.</summary>
@@ -121,13 +237,30 @@ public sealed class CertificadosCvController : ApiControllerBase
         return Ok(new { observaciones = resultado });
     }
 
-    /// <summary>Descarga el CV en PDF: datos personales + certificados con sus archivos adjuntos en un único archivo.</summary>
+    /// <summary>Descarga el CV en PDF: datos personales + certificados con sus archivos adjuntos en un único archivo. Agrega marca de trazabilidad discreta.</summary>
     [HttpGet("mi-cv")]
     public async Task<IActionResult> MiCv()
     {
         var cv = await _mediator.Send(new GenerarMiCvQuery(EmpleadoId));
         var pdf = await _generadorCv.GenerarAsync(cv.Datos, cv.Archivos);
-        return File(pdf, "application/pdf", $"CV_{datosNombre(cv)}");
+        var nombreBase = $"CV_{datosNombre(cv)}";
+        try
+        {
+            var userId = cv.Datos.Empleado.Legajo.ToString();
+            pdf = await _trazabilidad.AddTraceabilityToBytesAsync(
+                pdfBytes: pdf,
+                inputFileName: nombreBase,
+                userId: userId,
+                position: TrazabilidadPosicion.FooterRight,
+                encoding: TrazabilidadCodificacion.Morse,
+                registroJsonPath: _trazabilidadOptions.Value.RutaRegistro);
+        }
+        catch (Exception ex)
+        {
+            // No bloquear la descarga si falla la trazabilidad; se loguea y se entrega el PDF sin marca
+            Console.Error.WriteLine($"[Trazabilidad] fallo al marcar CV de {EmpleadoId}: {ex.Message}");
+        }
+        return File(pdf, "application/pdf", nombreBase);
     }
 
     private static string datosNombre(CvCompletoDto cv) =>
@@ -151,6 +284,21 @@ public sealed class CertificadosCvController : ApiControllerBase
             archivo.FileName, archivo.ContentType, stream));
 
         return CreatedAtAction(nameof(Mios), new { id = resultado.Id }, resultado);
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> EditarCertificado(Guid id, [FromBody] EditarCertificadoCvRequest request)
+    {
+        await _mediator.Send(new EditarCertificadoCvCommand(EmpleadoId, id, request.Nombre,
+            request.Institucion, request.Tipo, request.FechaObtencion));
+        return NoContent();
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> EliminarCertificado(Guid id)
+    {
+        await _mediator.Send(new EliminarCertificadoCvCommand(EmpleadoId, id));
+        return NoContent();
     }
 
     [HttpGet("{id:guid}/archivo")]
@@ -187,12 +335,19 @@ public sealed class CertificadosCvController : ApiControllerBase
 
 public sealed record RevisarCertificadoCvRequest(bool Verificado, string? Comentario);
 
+public sealed record EditarCertificadoCvRequest(
+    string Nombre, string Institucion, string Tipo, DateOnly FechaObtencion);
+
 public sealed record ObservacionesCvRequest(string? Observaciones);
 
 public sealed record TelefonoCvRequest(string? Telefono);
 
 public sealed record ExperienciaCvRequest(
     string Puesto, string Institucion, string? Descripcion, DateOnly FechaDesde, DateOnly? FechaHasta);
+
+public sealed record CvItemRequest(
+    string Seccion, string Categoria, string Titulo, string? Institucion, string? Descripcion,
+    DateOnly FechaDesde, DateOnly? FechaHasta);
 
 public sealed record AntecedenteAcademicoRequest(
     string Titulo, string Institucion, string Nivel, string? Descripcion, DateOnly FechaDesde, DateOnly? FechaHasta);
