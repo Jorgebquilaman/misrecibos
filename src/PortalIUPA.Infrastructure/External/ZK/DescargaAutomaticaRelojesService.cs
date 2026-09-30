@@ -7,19 +7,21 @@ using PortalIUPA.Domain.Ports;
 namespace PortalIUPA.Infrastructure.External.ZK;
 
 /// <summary>
-/// Descargador automático de marcas: cada 3 minutos intenta descargar los relojes en modo
-/// "directo" (protocolo ZK TCP) activos. Es el equivalente del rescatador externo pero vive
-/// dentro del API, así sobrevive reinicios del servidor sin scripts en /tmp.
+/// Descargador automático de marcas: cada 3 minutos intenta descargar SOLO los relojes que
+/// tienen el casillero "Sincronización automática" tildado (en cualquiera de sus modos:
+/// directo por protocolo ZK, o vía MSSQL de ZKBio). Con el casillero en falso el reloj se
+/// descarga únicamente de forma manual.
+/// Vive dentro del API, así sobrevive reinicios del servidor sin scripts en /tmp.
 /// Solo registra en el historial cuando aporta marcas nuevas (para no ensuciar el log de descargas).
 /// </summary>
-public sealed class DescargaDirectoRelojesService : BackgroundService
+public sealed class DescargaAutomaticaRelojesService : BackgroundService
 {
     private static readonly TimeSpan Periodo = TimeSpan.FromMinutes(3);
 
     private readonly IServiceScopeFactory _scopes;
-    private readonly ILogger<DescargaDirectoRelojesService> _logger;
+    private readonly ILogger<DescargaAutomaticaRelojesService> _logger;
 
-    public DescargaDirectoRelojesService(IServiceScopeFactory scopes, ILogger<DescargaDirectoRelojesService> logger)
+    public DescargaAutomaticaRelojesService(IServiceScopeFactory scopes, ILogger<DescargaAutomaticaRelojesService> logger)
     {
         _scopes = scopes;
         _logger = logger;
@@ -39,11 +41,11 @@ public sealed class DescargaDirectoRelojesService : BackgroundService
                 var relojes = scope.ServiceProvider.GetRequiredService<IRelojZkRepository>();
                 var servicio = scope.ServiceProvider.GetRequiredService<ServicioRelojesZk>();
 
-                var directos = (await relojes.GetAllAsync(ct))
-                    .Where(r => r.Activo && r.Modo == RelojZk.ModoDirecto)
+                var automaticos = (await relojes.GetAllAsync(ct))
+                    .Where(r => r.Activo && r.SincronizacionAutomatica)
                     .ToList();
 
-                foreach (var reloj in directos)
+                foreach (var reloj in automaticos)
                 {
                     try
                     {

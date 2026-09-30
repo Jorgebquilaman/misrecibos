@@ -12,9 +12,10 @@ interface FormReloj {
   commKey: string;
   modo: 'directo' | 'mssql';
   activo: boolean;
+  sincronizacionAutomatica: boolean;
 }
 
-const formVacio = (): FormReloj => ({ nombre: '', ip: '', puerto: '4370', commKey: '0', modo: 'directo', activo: true });
+const formVacio = (): FormReloj => ({ nombre: '', ip: '', puerto: '4370', commKey: '0', modo: 'directo', activo: true, sincronizacionAutomatica: false });
 
 export default function RelojesZkAdmin() {
   const [relojes, setRelojes] = useState<RelojZkDto[]>([]);
@@ -46,7 +47,8 @@ export default function RelojesZkAdmin() {
       puerto: Number(form.puerto) || 4370,
       commKey: Number(form.commKey) || 0,
       modo: form.modo,
-      activo: form.activo
+      activo: form.activo,
+      sincronizacionAutomatica: form.sincronizacionAutomatica
     };
     try {
       if (form.id) await relojesZkApi.editar(form.id, data);
@@ -196,6 +198,10 @@ export default function RelojesZkAdmin() {
                 <input type="checkbox" checked={form.activo} onChange={(e) => setForm({ ...form, activo: e.target.checked })} />
                 Activo
               </label>
+              <label className="flex items-center gap-2 self-end text-sm" title="El servicio automático del API descarga este reloj cada 3 minutos (directo o vía MSSQL). Sin tildar: solo con el botón Descargar.">
+                <input type="checkbox" checked={form.sincronizacionAutomatica} onChange={(e) => setForm({ ...form, sincronizacionAutomatica: e.target.checked })} />
+                Sincronización automática
+              </label>
             </div>
             <div className="flex flex-wrap gap-2">
               <button onClick={guardar} disabled={ocupado === 'guardar'} className="btn-primary">
@@ -221,6 +227,9 @@ export default function RelojesZkAdmin() {
                     {r.modo === 'mssql'
                       ? 'Vía ZKBio (MSSQL)'
                       : `${r.ip}:${r.puerto}${r.commKey > 0 ? ` · CommKey ${r.commKey}` : ''}`}
+                    {r.sincronizacionAutomatica && (
+                      <span className="ml-1 badge tint-success text-success">auto cada 3 min</span>
+                    )}
                   </p>
                   <p className="text-xs text-ink-secondary">
                     {r.ultimaDescarga
@@ -270,7 +279,8 @@ export default function RelojesZkAdmin() {
                         puerto: String(r.puerto),
                         commKey: String(r.commKey),
                         modo: r.modo,
-                        activo: r.activo
+                        activo: r.activo,
+                        sincronizacionAutomatica: r.sincronizacionAutomatica
                       });
                     }}
                     className="btn-secondary !px-2 !py-1"

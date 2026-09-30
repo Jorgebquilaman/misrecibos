@@ -52,7 +52,7 @@ public static class DependencyInjection
         services.AddScoped<IRelojZkRepository, RelojZkRepository>();
         services.AddScoped<IRelojZkDescargaRepository, RelojZkDescargaRepository>();
         services.AddScoped<ServicioRelojesZk>();
-        services.AddHostedService<DescargaDirectoRelojesService>();
+        services.AddHostedService<DescargaAutomaticaRelojesService>();
         services.AddScoped<ICvExperienciaAdjuntoRepository, CvExperienciaAdjuntoRepository>();
         services.AddScoped<IAccesoLogRepository, AccesoLogRepository>();
 

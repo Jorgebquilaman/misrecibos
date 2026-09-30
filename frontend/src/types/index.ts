@@ -347,6 +347,7 @@ export interface RelojZkDto {
   commKey: number;
   modo: 'directo' | 'mssql';
   activo: boolean;
+  sincronizacionAutomatica: boolean;
   ultimaDescarga: string | null;
   ultimaCantidad: number;
 }

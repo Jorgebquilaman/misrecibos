@@ -16,18 +16,22 @@ public sealed class RelojZk
     public int CommKey { get; private set; }
     public string Modo { get; private set; } = ModoDirecto;
     public bool Activo { get; private set; }
+    /// <summary>Cuando está activado, el servicio automático del API descarga este reloj cada pocos minutos.</summary>
+    public bool SincronizacionAutomatica { get; private set; }
     public DateTime? UltimaDescarga { get; private set; }
     public int UltimaCantidad { get; private set; }
 
     private RelojZk() { }
 
-    public RelojZk(string nombre, string ip, int puerto = 4370, int commKey = 0, bool activo = true, string modo = ModoDirecto)
+    public RelojZk(string nombre, string ip, int puerto = 4370, int commKey = 0, bool activo = true,
+        string modo = ModoDirecto, bool sincronizacionAutomatica = false)
     {
-        Editar(nombre, ip, puerto, commKey, activo, modo);
+        Editar(nombre, ip, puerto, commKey, activo, modo, sincronizacionAutomatica);
         Id = Guid.NewGuid();
     }
 
-    public void Editar(string nombre, string ip, int puerto, int commKey, bool activo, string modo = ModoDirecto)
+    public void Editar(string nombre, string ip, int puerto, int commKey, bool activo,
+        string modo = ModoDirecto, bool sincronizacionAutomatica = false)
     {
         if (string.IsNullOrWhiteSpace(nombre)) throw new ArgumentException("El nombre es obligatorio.", nameof(nombre));
         if (string.IsNullOrWhiteSpace(ip)) throw new ArgumentException("La IP es obligatoria.", nameof(ip));
@@ -43,6 +47,7 @@ public sealed class RelojZk
         CommKey = commKey;
         Modo = modoNormalizado;
         Activo = activo;
+        SincronizacionAutomatica = sincronizacionAutomatica;
     }
 
     public void RegistrarDescarga(DateTime fecha, int cantidad)

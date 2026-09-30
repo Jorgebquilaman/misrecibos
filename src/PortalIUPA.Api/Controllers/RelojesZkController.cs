@@ -26,7 +26,7 @@ public sealed class RelojesZkController : ApiControllerBase
     }
 
     public sealed record RelojZkDto(Guid Id, string Nombre, string Ip, int Puerto, int CommKey, string Modo, bool Activo,
-        DateTime? UltimaDescarga, int UltimaCantidad);
+        bool SincronizacionAutomatica, DateTime? UltimaDescarga, int UltimaCantidad);
     public sealed record RelojZkInfoDto(string? Nombre, string? Serial, int Usuarios, int Marcas, DateTime? UltimaMarca);
     public sealed record DescargaDto(int Leidas, int Nuevas, int Duplicadas, int Desconocidos, string? Mensaje,
         IReadOnlyList<MarcaLeidaDto> Marcas);
@@ -35,7 +35,8 @@ public sealed class RelojesZkController : ApiControllerBase
     public sealed record RelojZkDescargaDto(Guid Id, Guid RelojZkId, string RelojNombre, DateTime Fecha,
         int Leidas, int Nuevas, int Duplicadas, int LegajosDesconocidos, string Estado, string? Mensaje);
 
-    public sealed record GuardarRelojZkRequest(string Nombre, string Ip, int Puerto, int CommKey, bool Activo = true, string Modo = "directo");
+    public sealed record GuardarRelojZkRequest(string Nombre, string Ip, int Puerto, int CommKey, bool Activo = true,
+        string Modo = "directo", bool SincronizacionAutomatica = false);
     public sealed record DescargarRequest(DateTime? Desde, DateTime? Hasta);
 
     [HttpGet]
@@ -43,16 +44,17 @@ public sealed class RelojesZkController : ApiControllerBase
     {
         var lista = await _relojes.GetAllAsync(ct);
         return Ok(lista.Select(r => new RelojZkDto(r.Id, r.Nombre, r.Ip, r.Puerto, r.CommKey, r.Modo, r.Activo,
-            r.UltimaDescarga, r.UltimaCantidad)));
+            r.SincronizacionAutomatica, r.UltimaDescarga, r.UltimaCantidad)));
     }
 
     [HttpPost]
     public async Task<IActionResult> Crear([FromBody] GuardarRelojZkRequest request, CancellationToken ct)
     {
-        var reloj = new RelojZk(request.Nombre, request.Ip, request.Puerto, request.CommKey, request.Activo, request.Modo);
+        var reloj = new RelojZk(request.Nombre, request.Ip, request.Puerto, request.CommKey, request.Activo,
+            request.Modo, request.SincronizacionAutomatica);
         await _relojes.AddAsync(reloj, ct);
         return Ok(new RelojZkDto(reloj.Id, reloj.Nombre, reloj.Ip, reloj.Puerto, reloj.CommKey, reloj.Modo, reloj.Activo,
-            reloj.UltimaDescarga, reloj.UltimaCantidad));
+            reloj.SincronizacionAutomatica, reloj.UltimaDescarga, reloj.UltimaCantidad));
     }
 
     [HttpPut("{id:guid}")]
@@ -60,7 +62,8 @@ public sealed class RelojesZkController : ApiControllerBase
     {
         var reloj = await _relojes.GetByIdAsync(id, ct)
             ?? throw new EntidadNoEncontradaException("El reloj no existe.");
-        reloj.Editar(request.Nombre, request.Ip, request.Puerto, request.CommKey, request.Activo, request.Modo);
+        reloj.Editar(request.Nombre, request.Ip, request.Puerto, request.CommKey, request.Activo, request.Modo,
+            request.SincronizacionAutomatica);
         await _relojes.UpdateAsync(reloj, ct);
         return NoContent();
     }

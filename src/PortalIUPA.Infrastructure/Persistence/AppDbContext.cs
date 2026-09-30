@@ -283,6 +283,7 @@ public sealed class AppDbContext : DbContext
             e.Property(x => x.CommKey).HasColumnName("comm_key");
             e.Property(x => x.Modo).HasColumnName("modo").HasMaxLength(10).IsRequired();
             e.Property(x => x.Activo).HasColumnName("activo");
+            e.Property(x => x.SincronizacionAutomatica).HasColumnName("sincronizacion_automatica").HasDefaultValue(false);
             e.Property(x => x.UltimaDescarga).HasColumnName("ultima_descarga");
             e.Property(x => x.UltimaCantidad).HasColumnName("ultima_cantidad");
         });
