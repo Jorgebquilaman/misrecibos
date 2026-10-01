@@ -19,6 +19,25 @@ using PortalIUPA.Infrastructure.Auth;
 using PortalIUPA.Infrastructure.Persistence;
 using Serilog;
 
+// El SQL Server 2014 del reloj solo negocia TLS 1.0 con cifras legacy, que OpenSSL 3 rechaza
+// por defecto (SECLEVEL=2). El proceso debe arrancar con OPENSSL_CONF apuntando a la config
+// legacy; si quien arranca el API (ej. el unit de systemd) no la define, la seteamos acá
+// ANTES de cualquier operación TLS: OpenSSL carga esa configuración de forma lazy en la
+// primera operación SSL, así que definirla al inicio del Main es efectivo.
+// Referencia: /opt/portal-iupa/api/openssl-legacy.cnf (CipherString = DEFAULT@SECLEVEL=0).
+if (OperatingSystem.IsLinux())
+{
+    var legacyCnf = Path.Combine(AppContext.BaseDirectory, "openssl-legacy.cnf");
+    if (Environment.GetEnvironmentVariable("OPENSSL_CONF") is null && File.Exists(legacyCnf))
+        Environment.SetEnvironmentVariable("OPENSSL_CONF", legacyCnf);
+
+    // Además del 5003 (nginx), exponer el 8081 del receptor de push de relojes (ADMS) si
+    // el arranque no lo incluye (mismo caso: unit de systemd con una sola URL).
+    var urlsActuales = Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? "http://*:5003";
+    if (!urlsActuales.Contains("8081"))
+        Environment.SetEnvironmentVariable("ASPNETCORE_URLS", $"{urlsActuales.TrimEnd(';')};http://*:8081");
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilog((context, config) => config.ReadFrom.Configuration(context.Configuration));

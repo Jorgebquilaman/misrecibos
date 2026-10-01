@@ -24,4 +24,8 @@
     <ProjectReference Include="..\PortalIUPA.Infrastructure\PortalIUPA.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="openssl-legacy.cnf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
