@@ -365,6 +365,44 @@ public sealed class SqlServerRelojDataSource : IRelojDataSource
             _ => TipoMarca.Entrada,
         };
     }
+
+    /// <summary>Lee el checkinout completo del rango fila a fila (para export streaming).</summary>
+    public async IAsyncEnumerable<MarcaRelojCruda> IterarMarcasAsync(
+        int? legajo, DateTime desde, DateTime hasta,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(_options.SqlServerConnectionString))
+            throw new RelojNoDisponibleException("Reloj no configurado (sin SqlServerConnectionString).");
+
+        await using var conexion = new SqlConnection(ConnectionString);
+        await conexion.OpenAsync(ct);
+        const string sql = """
+            SELECT ui.BADGENUMBER, ci.CHECKTIME, ci.CHECKTYPE, ci.SENSORID
+            FROM checkinout ci
+            INNER JOIN userinfo ui ON ui.USERID = ci.USERID
+            WHERE ci.CHECKTIME >= @Desde AND ci.CHECKTIME <= @Hasta
+              AND (@Legajo IS NULL OR ui.BADGENUMBER = @Legajo)
+            ORDER BY ci.CHECKTIME
+            """;
+        await using var comando = new SqlCommand(sql, conexion);
+        comando.CommandTimeout = 60;
+        comando.Parameters.Add("@Desde", SqlDbType.DateTime2).Value = desde;
+        comando.Parameters.Add("@Hasta", SqlDbType.DateTime2).Value = hasta;
+        comando.Parameters.Add("@Legajo", SqlDbType.Int).Value = legajo.HasValue ? (object)legajo.Value : DBNull.Value;
+
+        await using var lector = await comando.ExecuteReaderAsync(ct);
+        while (await lector.ReadAsync(ct))
+        {
+            if (!TryParseLegajo(lector["BADGENUMBER"], out var legajoLeido))
+                continue;
+
+            yield return new MarcaRelojCruda(
+                legajoLeido,
+                lector.GetDateTime(1),
+                ParseTipo(lector["CHECKTYPE"]),
+                lector["SENSORID"] is DBNull ? null : Convert.ToString(lector["SENSORID"]));
+        }
+    }
 }
 
 /// <summary>
@@ -411,6 +449,14 @@ public sealed class MockRelojDataSource : IRelojDataSource
         }
 
         return Task.FromResult<IReadOnlyList<MarcaRelojCruda>>(marcas);
+    }
+
+    public async IAsyncEnumerable<MarcaRelojCruda> IterarMarcasAsync(
+        int? legajo, DateTime desde, DateTime hasta,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        foreach (var marca in await ObtenerMarcasAsync(legajo, desde, hasta, ct))
+            yield return marca;
     }
 
     public Task<bool> RegistrarMarcaAsync(int legajo, DateTime fechaHora, TipoMarca tipo, CancellationToken ct = default)

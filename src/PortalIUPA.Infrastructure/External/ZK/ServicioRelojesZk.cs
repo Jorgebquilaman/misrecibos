@@ -67,6 +67,47 @@ public sealed class ServicioRelojesZk
         return new RelojZkInfo("ZKBio (base del reloj)", "lectura por checkinout", 0, marcas.Count, ultima);
     }
 
+    /// <summary>
+    /// Exporta TODAS las marcas del reloj como líneas de texto (legajo;fecha_hora;tipo),
+    /// una a la vez (streaming: el llamador las escribe al response sin cargar todo en memoria).
+    /// </summary>
+    public async IAsyncEnumerable<string> ExportarLineasAsync(
+        RelojZk reloj, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        yield return $"# Reloj: {reloj.Nombre} ({reloj.Modo}) — exportado {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+        yield return "legajo;fecha_hora;tipo";
+
+        var total = 0;
+        if (reloj.Modo == RelojZk.ModoMssql)
+        {
+            await foreach (var m in _fuenteReloj.IterarMarcasAsync(null, new DateTime(2000, 1, 1), DateTime.Now.AddDays(30), ct))
+            {
+                yield return $"{m.Legajo};{m.FechaHora:yyyy-MM-dd HH:mm:ss};{(m.Tipo == TipoMarca.Salida ? "Salida" : "Entrada")}";
+                total++;
+            }
+        }
+        else
+        {
+            using var cliente = await ZkDeviceClient.ConectarAsync(reloj.Ip, reloj.Puerto, reloj.CommKey, ct);
+            List<MarcaZkCruda> marcas;
+            try
+            {
+                marcas = (await cliente.LeerMarcasAsync(ct)).ToList();
+            }
+            finally
+            {
+                await cliente.DesconectarAsync(ct);
+            }
+            foreach (var m in marcas)
+            {
+                yield return $"{m.Legajo};{m.FechaHora:yyyy-MM-dd HH:mm:ss};{(m.Estado == 1 ? "Salida" : "Entrada")}";
+                total++;
+            }
+        }
+
+        yield return $"# total: {total} marcas";
+    }
+
     /// <param name="desde">Opcional: fecha mínima de las marcas a importar.</param>
     /// <param name="hasta">Opcional: fecha máxima de las marcas a importar.</param>
     /// <param name="registrarLogSiempre">False = solo registra el log cuando hay marcas nuevas (para la sincronización automática).</param>

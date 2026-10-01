@@ -108,6 +108,36 @@ public sealed class RelojesZkController : ApiControllerBase
         return NoContent();
     }
 
+    /// <summary>Exporta TODAS las marcas del reloj a un archivo de texto (legajo;fecha_hora;tipo).</summary>
+    [HttpGet("{id:guid}/exportar-marcas-txt")]
+    public async Task ExportarTxt(Guid id, CancellationToken ct)
+    {
+        var reloj = await _relojes.GetByIdAsync(id, ct)
+            ?? throw new EntidadNoEncontradaException("El reloj no existe.");
+
+        var nombreArchivo = $"marcas_{Slug(reloj.Nombre)}_{DateTime.Now:yyyy-MM-dd}.txt";
+        Response.ContentType = "text/plain; charset=utf-8";
+        Response.Headers.ContentDisposition = $"attachment; filename=\"{nombreArchivo}\"";
+
+        // Streaming asíncrono por lotes (~64 KB por write): Kestrel no permite IO síncrona.
+        var buffer = new MemoryStream();
+        var codificacion = new System.Text.UTF8Encoding(false);
+        await foreach (var linea in _servicio.ExportarLineasAsync(reloj, ct))
+        {
+            buffer.Write(codificacion.GetBytes(linea + "\n"));
+            if (buffer.Length >= 64 * 1024)
+            {
+                await Response.Body.WriteAsync(buffer.ToArray(), ct);
+                buffer.SetLength(0);
+            }
+        }
+        if (buffer.Length > 0)
+            await Response.Body.WriteAsync(buffer.ToArray(), ct);
+    }
+
+    private static string Slug(string nombre) =>
+        new string(nombre.Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '_').ToArray());
+
     [HttpGet("descargas")]
     public async Task<IActionResult> Descargas(CancellationToken ct)
     {

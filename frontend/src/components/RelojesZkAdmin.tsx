@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, Fingerprint, Loader2, Pencil, Plug, Plus, Trash2, X } from 'lucide-react';
+import { Download, FileText, Fingerprint, Loader2, Pencil, Plug, Plus, Trash2, X } from 'lucide-react';
 import { relojesZkApi } from '../api';
 import type { RelojZkDescargaDto, RelojZkDto, RelojZkInfoDto, ResultadoDescargaRelojZkDto } from '../types';
 import { formatFechaHora } from '../utils';
@@ -72,6 +72,20 @@ export default function RelojesZkAdmin() {
       cargar();
     } catch (e: any) {
       setError(e.response?.data?.error ?? 'No se pudo eliminar el reloj.');
+    }
+  };
+
+  const exportarTxt = async (r: RelojZkDto) => {
+    if (!confirm(`¿Exportar TODAS las marcas del reloj "${r.nombre}" a un archivo de texto?`)) return;
+    setError(null);
+    setOcupado(`txt-${r.id}`);
+    try {
+      await relojesZkApi.exportarTxt(r.id, r.nombre);
+      setMensaje('Archivo de marcas generado.');
+    } catch (e: any) {
+      setError(e.response?.data?.error ?? 'No se pudo exportar el archivo de marcas.');
+    } finally {
+      setOcupado(null);
     }
   };
 
@@ -257,6 +271,14 @@ export default function RelojesZkAdmin() {
                     ) : (
                       <><Download size={14} /> Descargar</>
                     )}
+                  </button>
+                  <button
+                    onClick={() => exportarTxt(r)}
+                    disabled={ocupado !== null}
+                    className="btn-secondary !px-2 !py-1 text-xs"
+                    title="Descargar todas las marcas en un archivo de texto (legajo;fecha;tipo)"
+                  >
+                    {ocupado === `txt-${r.id}` ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />} TXT
                   </button>
                   {r.modo === 'directo' && (
                     <button

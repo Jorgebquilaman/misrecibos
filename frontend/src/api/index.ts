@@ -256,6 +256,15 @@ export const relojesZkApi = {
       `/relojes-zk/${id}/descargar`, (desde || hasta) ? { desde, hasta } : {}
     ).then((r) => r.data),
   vaciar: (id: string) => api.post(`/relojes-zk/${id}/vaciar`),
+  exportarTxt: async (id: string, nombreReloj: string) => {
+    const r = await api.get(`/relojes-zk/${id}/exportar-marcas-txt`, { responseType: 'blob' });
+    const url = URL.createObjectURL(r.data as Blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `marcas_${nombreReloj.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
   descargas: () => api.get<RelojZkDescargaDto[]>('/relojes-zk/descargas').then((r) => r.data)
 };
 

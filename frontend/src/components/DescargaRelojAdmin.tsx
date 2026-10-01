@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, Loader2, Plug, RefreshCw, X } from 'lucide-react';
+import { Download, FileText, Loader2, Plug, RefreshCw, X } from 'lucide-react';
 import { relojesZkApi } from '../api';
 import type { RelojZkDescargaDto, RelojZkDto, ResultadoDescargaRelojZkDto } from '../types';
 import { formatFechaHora } from '../utils';
@@ -41,6 +41,20 @@ export default function DescargaRelojAdmin() {
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: string } } };
       setError(err.response?.data?.error ?? `No se pudo conectar a ${r.ip}:${r.puerto}.`);
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  const exportarTxt = async (r: RelojZkDto) => {
+    if (!confirm(`¿Exportar TODAS las marcas del reloj "${r.nombre}" a un archivo de texto?`)) return;
+    setError(null);
+    setOcupado(`txt-${r.id}`);
+    try {
+      await relojesZkApi.exportarTxt(r.id, r.nombre);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      setError(err.response?.data?.error ?? 'No se pudo exportar el archivo de marcas.');
     } finally {
       setOcupado(null);
     }
@@ -117,6 +131,14 @@ export default function DescargaRelojAdmin() {
                   {ocupado === `descargar-${r.id}`
                     ? <Loader2 size={13} className="animate-spin" />
                     : <Download size={13} />} Descargar
+                </button>
+                <button
+                  onClick={() => exportarTxt(r)}
+                  disabled={ocupado !== null}
+                  className="btn-secondary flex items-center gap-1 text-xs"
+                  title="Descargar todas las marcas en un archivo de texto"
+                >
+                  {ocupado === `txt-${r.id}` ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />} TXT
                 </button>
               </div>
             </div>

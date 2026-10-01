@@ -15,6 +15,10 @@ public interface IRelojDataSource
     Task<IReadOnlyList<MarcaRelojCruda>> ObtenerMarcasAsync(int? legajo, DateTime desde, DateTime hasta,
         CancellationToken ct = default);
 
+    /// <summary>Lee todas las marcas del rango una a una (streaming, para exportar el historial completo sin cargarlo en memoria).</summary>
+    IAsyncEnumerable<MarcaRelojCruda> IterarMarcasAsync(int? legajo, DateTime desde, DateTime hasta,
+        CancellationToken ct = default);
+
     /// <summary>Registra una marca manual directamente en la base del reloj (SQL Server). Retorna false si no se pudo registrar.</summary>
     Task<bool> RegistrarMarcaAsync(int legajo, DateTime fechaHora, TipoMarca tipo, CancellationToken ct = default);
 
